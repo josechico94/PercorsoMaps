@@ -17,6 +17,24 @@
     body { overflow: hidden; box-sizing: border-box; }
     .leaflet-container { background: #0b1220; }
 
+    /* ====== Z-INDEX FIX (CRÍTICO) ======
+       Leaflet panes/controls suelen usar z-index altos (200-1000).
+       Nosotros forzamos el mapa a estar por debajo del sidebar y overlays UI.
+    */
+    #map { position: absolute; inset: 0; z-index: 1; }
+    .leaflet-control-container { z-index: 2 !important; } /* controles sobre mapa, pero bajo sidebar */
+    .leaflet-pane { z-index: 1 !important; }
+    .leaflet-top, .leaflet-bottom { z-index: 2 !important; }
+
+    /* Sidebar y overlays SIEMPRE arriba */
+    #sidebar { z-index: 60; }
+    #sidebar-backdrop { z-index: 55; }
+    #route-info { z-index: 40; }
+    #route-fab { z-index: 45; }
+    #nav-panel { z-index: 50; }
+    #loading { z-index: 70; }
+    #toast-container { z-index: 80; }
+
     /* Scrollbar */
     .nice-scroll::-webkit-scrollbar { width: 10px; }
     .nice-scroll::-webkit-scrollbar-track { background: rgba(148,163,184,0.08); border-radius: 999px; }
@@ -46,17 +64,7 @@
     .dragging { opacity: 0.55; }
     .drop-hint { outline: 2px dashed rgba(99,102,241,0.9); outline-offset: 2px; }
 
-    .suggestions {
-      position: absolute; z-index: 60; width: 100%;
-      max-height: 240px; overflow: auto;
-      border-radius: 14px; border: 1px solid rgba(148,163,184,0.25);
-      background: rgba(15,23,42,0.95); backdrop-filter: blur(10px);
-      box-shadow: 0 16px 45px rgba(0,0,0,0.45);
-    }
-    .suggestions button { display:block; width:100%; text-align:left; padding:10px 12px; font-size: 13px; }
-    .suggestions button:hover { background: rgba(99,102,241,0.12); }
-
-    /* ✅ Route panel responsive */
+    /* ✅ Route panel: desktop side + mobile bottom sheet */
     #route-info {
       max-height: 70vh;
       overflow: auto;
@@ -66,13 +74,40 @@
         top: auto !important;
         right: 12px !important;
         left: 12px !important;
-        bottom: 12px !important;
+        bottom: 86px !important; /* deja espacio para nav-panel */
         width: auto !important;
         max-width: none !important;
-        max-height: 46vh !important;
+        max-height: 38vh !important;
         border-radius: 18px !important;
       }
     }
+
+    /* ✅ Nav panel (siempre abajo cuando hay ruta) */
+    #nav-panel {
+      position: absolute;
+      left: 12px;
+      right: 12px;
+      bottom: 12px;
+      background: rgba(15,23,42,0.92);
+      border: 1px solid rgba(148,163,184,0.25);
+      backdrop-filter: blur(12px);
+      border-radius: 18px;
+      padding: 10px 12px;
+      box-shadow: 0 18px 50px rgba(0,0,0,0.45);
+      display: none;
+    }
+    @media (min-width: 1024px) {
+      #nav-panel {
+        left: auto;
+        right: 16px;
+        bottom: 16px;
+        width: 360px;
+      }
+    }
+
+    /* Sidebar scroll sólido */
+    #sidebar-scroll { overscroll-behavior: contain; }
+
   </style>
 </head>
 
@@ -105,7 +140,7 @@
     <!-- Main -->
     <main class="flex-1 flex overflow-hidden relative">
       <!-- Backdrop mobile -->
-      <div id="sidebar-backdrop" class="fixed inset-0 bg-black/60 z-40 hidden lg:hidden"></div>
+      <div id="sidebar-backdrop" class="fixed inset-0 bg-black/60 hidden lg:hidden"></div>
 
       <!-- Sidebar -->
       <aside id="sidebar"
@@ -114,12 +149,10 @@
                bg-slate-800/80 backdrop-blur
                border-r border-slate-700
                flex flex-col overflow-hidden
-               z-50
                transform -translate-x-full lg:translate-x-0
                transition-transform duration-200 ease-out">
 
         <div id="sidebar-scroll" class="flex-1 overflow-y-auto nice-scroll">
-
           <!-- Add Address -->
           <div class="p-4 border-b border-slate-700">
             <div class="flex items-center justify-between mb-3">
@@ -135,11 +168,8 @@
             </div>
 
             <form id="address-form" class="space-y-3 relative">
-              <div class="relative">
-                <input type="text" id="address-input" placeholder="Dirección completa..."
-                  class="w-full px-4 py-3 bg-slate-700/50 border border-slate-600 rounded-xl focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all" />
-                <div id="address-suggestions" class="suggestions hidden mt-2"></div>
-              </div>
+              <input type="text" id="address-input" placeholder="Dirección completa..."
+                class="w-full px-4 py-3 bg-slate-700/50 border border-slate-600 rounded-xl focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all" />
 
               <div class="grid grid-cols-2 gap-3">
                 <input type="text" id="zone-input" placeholder="Zona"
@@ -148,8 +178,8 @@
                   class="px-4 py-2.5 bg-slate-700/50 border border-slate-600 rounded-xl focus:outline-none focus:border-indigo-500 transition-all" />
               </div>
 
-              <button type="submit" class="w-full py-3 btn-primary text-white font-semibold rounded-xl flex items-center justify-center gap-2">
-                <span>Agregar Dirección</span>
+              <button type="submit" class="w-full py-3 btn-primary text-white font-semibold rounded-xl">
+                Agregar Dirección
               </button>
             </form>
 
@@ -158,11 +188,9 @@
                 class="py-2.5 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-xl transition-all text-sm">
                 Importar CSV/Excel
               </button>
-
-              <label class="py-2.5 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-xl transition-all text-sm flex items-center justify-center cursor-pointer">
-                <input id="restore-input" type="file" accept=".json" class="hidden" />
-                Restaurar JSON
-              </label>
+              <span class="py-2.5 bg-slate-700/60 text-white/70 font-semibold rounded-xl text-sm flex items-center justify-center">
+                (Excel OK)
+              </span>
             </div>
 
             <label class="flex items-center gap-2 text-xs text-slate-300 mt-3">
@@ -213,30 +241,6 @@
             </div>
           </div>
 
-          <!-- Filters -->
-          <div class="p-4 border-b border-slate-700">
-            <h2 class="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-3">Filtros</h2>
-            <div class="space-y-3">
-              <select id="zone-filter" class="w-full px-4 py-2.5 bg-slate-700/50 border border-slate-600 rounded-xl">
-                <option value="">Todas las zonas</option>
-              </select>
-
-              <select id="postal-filter" class="w-full px-4 py-2.5 bg-slate-700/50 border border-slate-600 rounded-xl">
-                <option value="">Todos los códigos postales</option>
-              </select>
-
-              <div>
-                <label class="text-sm text-slate-400 mb-1 block">Radio: <span id="distance-value">50</span> km</label>
-                <input type="range" id="distance-filter" min="1" max="100" value="50"
-                  class="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-indigo-500">
-              </div>
-
-              <button id="reset-filters" class="w-full py-2.5 bg-slate-700 hover:bg-slate-600 rounded-xl font-semibold transition-all text-sm">
-                Reset filtros
-              </button>
-            </div>
-          </div>
-
           <!-- Route Planner -->
           <div class="p-4 border-b border-slate-700">
             <div class="flex items-center justify-between mb-2">
@@ -245,11 +249,11 @@
             </div>
 
             <p class="text-xs text-slate-500 mb-3">
-              Elegí inicio/fin, seleccioná puntos y luego optimizá o calculá en tu orden.
+              Elegí inicio/fin, seleccioná puntos y luego optimizá o calculá.
             </p>
 
             <div class="grid grid-cols-2 gap-2 mb-3">
-              <div class="relative">
+              <div>
                 <label class="text-xs text-slate-400">Inicio</label>
                 <select id="start-select" class="w-full mt-1 px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-sm">
                   <option value="">Seleccionar...</option>
@@ -259,10 +263,9 @@
                 <input id="start-new" type="text"
                   class="hidden w-full mt-2 px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-sm"
                   placeholder="Inicio (ej: Via Rizzoli 1)" />
-                <div id="start-suggestions" class="suggestions hidden mt-2"></div>
               </div>
 
-              <div class="relative">
+              <div>
                 <label class="text-xs text-slate-400">Fin</label>
                 <select id="end-select" class="w-full mt-1 px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-sm">
                   <option value="">Seleccionar...</option>
@@ -272,7 +275,6 @@
                 <input id="end-new" type="text"
                   class="hidden w-full mt-2 px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-sm"
                   placeholder="Fin" />
-                <div id="end-suggestions" class="suggestions hidden mt-2"></div>
               </div>
             </div>
 
@@ -294,16 +296,10 @@
                 Limpiar selección/ruta
               </button>
             </div>
-          </div>
 
-          <!-- Route order -->
-          <div class="p-4 border-b border-slate-700">
-            <div class="flex items-center justify-between mb-2">
-              <h3 class="text-sm font-semibold text-slate-400 uppercase tracking-wider">Orden de visita</h3>
-              <span class="text-xs text-slate-500">Drag & drop</span>
-            </div>
-            <div id="route-order" class="space-y-2">
-              <p class="text-xs text-slate-500">Seleccioná direcciones para armar el orden acá.</p>
+            <!-- ✅ INFO modo navegación -->
+            <div class="mt-3 text-xs text-slate-400">
+              <span class="font-semibold text-slate-200">Modo navegación:</span> aparece abajo cuando calculás una ruta.
             </div>
           </div>
 
@@ -317,17 +313,17 @@
 
       <!-- Map -->
       <div class="flex-1 relative">
-        <div id="map" class="absolute inset-0"></div>
+        <div id="map"></div>
 
-        <!-- ✅ Floating button to open route panel (when hidden) -->
+        <!-- Floating button to open route panel -->
         <button id="route-fab"
-          class="hidden absolute bottom-4 right-4 z-30 px-4 py-2 rounded-xl bg-indigo-500 hover:bg-indigo-600 font-semibold shadow-xl">
+          class="hidden absolute bottom-4 right-4 px-4 py-2 rounded-xl bg-indigo-500 hover:bg-indigo-600 font-semibold shadow-xl">
           Ruta
         </button>
 
-        <!-- ✅ Route info -->
+        <!-- Route info -->
         <div id="route-info"
-          class="absolute top-4 right-4 bg-slate-800/90 backdrop-blur-lg rounded-2xl p-4 shadow-xl border border-slate-700 hidden w-[340px] z-30 nice-scroll">
+          class="absolute top-4 right-4 bg-slate-800/90 backdrop-blur-lg rounded-2xl p-4 shadow-xl border border-slate-700 hidden w-[340px] nice-scroll">
           <div class="flex items-center justify-between gap-2 mb-2">
             <h3 class="font-bold text-lg">Ruta</h3>
 
@@ -344,8 +340,38 @@
           <div id="route-details" class="text-sm text-slate-300 space-y-1"></div>
         </div>
 
+        <!-- ✅ NAVIGATION PANEL -->
+        <div id="nav-panel">
+          <div class="flex items-center justify-between">
+            <div class="text-sm font-semibold">Navegación</div>
+            <div class="flex items-center gap-2">
+              <select id="nav-speed" class="text-xs bg-slate-800 border border-slate-700 rounded-lg px-2 py-1">
+                <option value="1">x1</option>
+                <option value="2">x2</option>
+                <option value="4">x4</option>
+                <option value="8">x8</option>
+              </select>
+              <button id="nav-toggle" class="text-xs px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-600 font-semibold">
+                ▶︎ Play
+              </button>
+              <button id="nav-stop" class="text-xs px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 font-semibold">
+                Stop
+              </button>
+            </div>
+          </div>
+
+          <div class="mt-2">
+            <input id="nav-progress" type="range" min="0" max="100" value="0"
+              class="w-full accent-indigo-500">
+            <div class="flex items-center justify-between text-[11px] text-slate-300 mt-1">
+              <span id="nav-status">0%</span>
+              <span id="nav-eta">—</span>
+            </div>
+          </div>
+        </div>
+
         <!-- Loading -->
-        <div id="loading" class="absolute inset-0 bg-slate-900/75 backdrop-blur flex items-center justify-center hidden z-40">
+        <div id="loading" class="absolute inset-0 bg-slate-900/75 backdrop-blur flex items-center justify-center hidden">
           <div class="bg-slate-800/80 border border-slate-700 rounded-2xl p-6 w-[min(420px,calc(100vw-32px))] shadow-2xl">
             <div class="flex items-center gap-3">
               <div class="w-12 h-12 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
@@ -356,106 +382,88 @@
             </div>
           </div>
         </div>
+
       </div>
     </main>
 
     <!-- Toast -->
-    <div id="toast-container" class="fixed bottom-4 right-4 space-y-2 z-[70]"></div>
-
-    <!-- Delete Modal -->
-    <div id="delete-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[80] hidden">
-      <div class="bg-slate-800 rounded-2xl p-6 max-w-sm mx-4 border border-slate-700 shadow-2xl">
-        <h3 class="text-lg font-bold text-center mb-2">¿Eliminar dirección?</h3>
-        <p id="delete-address-text" class="text-sm text-slate-400 text-center mb-6">Esta acción no se puede deshacer.</p>
-        <div class="flex gap-3">
-          <button id="cancel-delete" class="flex-1 py-2.5 bg-slate-700 hover:bg-slate-600 rounded-xl font-semibold transition-all">Cancelar</button>
-          <button id="confirm-delete" class="flex-1 py-2.5 bg-red-500 hover:bg-red-600 rounded-xl font-semibold transition-all">Eliminar</button>
-        </div>
-      </div>
-    </div>
+    <div id="toast-container" class="fixed bottom-4 right-4 space-y-2"></div>
   </div>
 
   <script>
+    // ========= CONFIG =========
     const config = {
       maxAddresses: 999,
       maxRoutePoints: 10,
       importGeocodeDelayMs: 850,
       defaultCenter: [44.4949, 11.3426], // Bologna
       defaultZoom: 13,
-      storageKey: "route_planner_beta_state_v4",
-      geocodeCacheKey: "route_planner_beta_geocode_cache_v4"
+      storageKey: "route_planner_beta_state_v5",
+      geocodeCacheKey: "route_planner_beta_geocode_cache_v5"
     };
 
+    // ========= STATE =========
     let addresses = [];
     let selectedIds = [];
-    let visitOrderIds = [];
     let markers = {};
     let map = null;
 
     let routeLayer = null;
     let routeNumberMarkers = [];
-    let deleteTargetId = null;
     let importedData = null;
 
     let startPoint = null;
     let endPoint = null;
-    let lastOrderedRoutePoints = null;
+
+    let lastRoutePoints = null;     // [{lat,lng,address}...]
+    let lastRouteGeo = null;        // geojson geometry (LineString)
+    let lastRouteDurationSec = 0;   // from OSRM
+
+    // Nav state
+    let navMarker = null;
+    let navTimer = null;
+    let navPlaying = false;
+    let navT = 0; // 0..1
 
     let geocodeCache = {};
     const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
-    function setLoading(isLoading, text = "Procesando...", sub = "") {
+    // ========= Helpers =========
+    function setLoading(isLoading, text="Procesando...", sub="") {
       document.getElementById("loading-text").textContent = text;
       document.getElementById("loading-sub").textContent = sub || "—";
       document.getElementById("loading").classList.toggle("hidden", !isLoading);
     }
-
-    function setButtonLoading(btn, loading, doneLabel) {
-      if (!btn) return;
-      if (loading) {
-        btn.dataset.prev = btn.innerHTML;
-        btn.disabled = true;
-        btn.innerHTML = `<span class="inline-flex items-center gap-2">
-          <span class="w-4 h-4 border-2 border-white/80 border-t-transparent rounded-full animate-spin"></span>
-          <span>Calculando…</span>
-        </span>`;
-      } else {
-        btn.disabled = false;
-        btn.innerHTML = doneLabel ?? (btn.dataset.prev || btn.innerHTML);
-      }
-    }
-
     function escapeHtml(str) {
-      return String(str)
-        .replaceAll("&", "&amp;")
-        .replaceAll("<", "&lt;")
-        .replaceAll(">", "&gt;")
-        .replaceAll('"', "&quot;")
-        .replaceAll("'", "&#039;");
+      return String(str).replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;")
+        .replaceAll('"',"&quot;").replaceAll("'","&#039;");
     }
-    function escapeAttr(str) { return escapeHtml(str).replaceAll("`", "&#096;"); }
-
-    function showToast(message, type = "info") {
+    function showToast(message, type="info") {
       const container = document.getElementById("toast-container");
       const toast = document.createElement("div");
       const colors = { success:"bg-emerald-500", error:"bg-red-500", warning:"bg-amber-500", info:"bg-indigo-500" };
-      toast.className = `toast ${colors[type] || colors.info} text-white px-4 py-3 rounded-xl shadow-lg`;
+      toast.className = `toast ${colors[type]||colors.info} text-white px-4 py-3 rounded-xl shadow-lg`;
       toast.innerHTML = `<span class="text-sm">${escapeHtml(message)}</span>`;
       container.appendChild(toast);
       setTimeout(() => toast.remove(), 3200);
     }
 
     function loadGeocodeCache() {
-      try {
-        const raw = localStorage.getItem(config.geocodeCacheKey);
-        if (raw) {
-          const parsed = JSON.parse(raw);
-          if (parsed && typeof parsed === "object") geocodeCache = parsed;
-        }
-      } catch {}
+      try { geocodeCache = JSON.parse(localStorage.getItem(config.geocodeCacheKey) || "{}"); } catch {}
     }
     function saveGeocodeCache() {
       try { localStorage.setItem(config.geocodeCacheKey, JSON.stringify(geocodeCache)); } catch {}
+    }
+    function saveState() {
+      try { localStorage.setItem(config.storageKey, JSON.stringify({ addresses })); } catch {}
+    }
+    function loadState() {
+      try {
+        const raw = localStorage.getItem(config.storageKey);
+        if (!raw) return;
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed?.addresses)) addresses = parsed.addresses;
+      } catch {}
     }
 
     function normalizeAddressForGeocode(addr) {
@@ -474,7 +482,6 @@
       const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&limit=1`;
       const res = await fetch(url, { headers: { "Accept": "application/json" } });
       if (!res.ok) return null;
-
       const data = await res.json();
       if (data && data.length) {
         const coords = { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
@@ -485,18 +492,7 @@
       return null;
     }
 
-    function saveState() {
-      try { localStorage.setItem(config.storageKey, JSON.stringify({ addresses })); } catch {}
-    }
-    function loadState() {
-      try {
-        const raw = localStorage.getItem(config.storageKey);
-        if (!raw) return;
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed?.addresses)) addresses = parsed.addresses;
-      } catch {}
-    }
-
+    // ========= Map =========
     function initMap() {
       map = L.map("map", { center: config.defaultCenter, zoom: config.defaultZoom, zoomControl: true });
       L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
@@ -506,7 +502,7 @@
       }).addTo(map);
     }
 
-    function createMarker(addr, isSelected = false) {
+    function createMarker(addr, isSelected=false) {
       const icon = L.divIcon({
         className: `custom-marker ${isSelected ? "selected-marker" : ""}`,
         iconSize: [24, 24],
@@ -515,97 +511,33 @@
 
       const marker = L.marker([addr.lat, addr.lng], { icon })
         .addTo(map)
-        .bindPopup(`
-          <div class="p-2">
-            <strong>${escapeHtml(addr.address)}</strong><br>
-            <span class="text-sm">${escapeHtml(addr.zone || "Sin zona")} - ${escapeHtml(addr.postal_code || "Sin CP")}</span>
-          </div>
-        `);
+        .bindPopup(`<div class="p-2"><strong>${escapeHtml(addr.address)}</strong></div>`);
 
       marker.on("click", () => toggleAddressSelection(addr.id));
       return marker;
     }
 
-    function getDistanceKm(lat1, lon1, lat2, lon2) {
-      const R = 6371;
-      const dLat = (lat2 - lat1) * Math.PI / 180;
-      const dLon = (lon2 - lon1) * Math.PI / 180;
-      const a = Math.sin(dLat/2) ** 2 +
-                Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-                Math.sin(dLon/2) ** 2;
-      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-      return R * c;
-    }
-
-    function getFilteredAddresses() {
-      const zoneFilter = document.getElementById("zone-filter").value;
-      const postalFilter = document.getElementById("postal-filter").value;
-      const distanceFilter = parseInt(document.getElementById("distance-filter").value, 10);
-
-      let filtered = [...addresses];
-      if (zoneFilter) filtered = filtered.filter(a => a.zone === zoneFilter);
-      if (postalFilter) filtered = filtered.filter(a => a.postal_code === postalFilter);
-
-      if (distanceFilter < 100 && filtered.length && map) {
-        const center = map.getCenter();
-        filtered = filtered.filter(a => a.lat && a.lng && getDistanceKm(center.lat, center.lng, a.lat, a.lng) <= distanceFilter);
-      }
-      return filtered;
-    }
-
     function updateMarkers() {
       Object.values(markers).forEach(m => map.removeLayer(m));
       markers = {};
-
-      const filtered = getFilteredAddresses();
-      filtered.forEach(addr => {
+      addresses.forEach(addr => {
         if (addr.lat && addr.lng) markers[addr.id] = createMarker(addr, selectedIds.includes(addr.id));
       });
-
-      const bounds = filtered.filter(a => a.lat && a.lng).map(a => [a.lat, a.lng]);
-      if (bounds.length) map.fitBounds(bounds, { padding: [50, 50] });
     }
 
-    function updateFilters() {
-      const zones = [...new Set(addresses.map(a => a.zone).filter(Boolean))];
-      const postals = [...new Set(addresses.map(a => a.postal_code).filter(Boolean))];
-
-      const zoneSelect = document.getElementById("zone-filter");
-      const postalSelect = document.getElementById("postal-filter");
-
-      const currentZone = zoneSelect.value;
-      const currentPostal = postalSelect.value;
-
-      zoneSelect.innerHTML = `<option value="">Todas las zonas</option>` +
-        zones.map(z => `<option value="${escapeAttr(z)}" ${z===currentZone?"selected":""}>${escapeHtml(z)}</option>`).join("");
-
-      postalSelect.innerHTML = `<option value="">Todos los códigos postales</option>` +
-        postals.map(p => `<option value="${escapeAttr(p)}" ${p===currentPostal?"selected":""}>${escapeHtml(p)}</option>`).join("");
-    }
-
+    // ========= Selection =========
     function toggleAddressSelection(id) {
       const idx = selectedIds.indexOf(id);
-      if (idx > -1) {
-        selectedIds.splice(idx, 1);
-        visitOrderIds = visitOrderIds.filter(x => x !== id);
-      } else {
-        if (selectedIds.length >= config.maxRoutePoints) {
-          showToast(`Máximo ${config.maxRoutePoints} puntos intermedios`, "warning");
-          return;
-        }
+      if (idx > -1) selectedIds.splice(idx, 1);
+      else {
+        if (selectedIds.length >= config.maxRoutePoints) return showToast(`Máximo ${config.maxRoutePoints} puntos`, "warning");
         selectedIds.push(id);
-        visitOrderIds.push(id);
       }
       updateUI();
       updateMarkers();
     }
 
-    function syncVisitOrderWithSelected() {
-      const setSel = new Set(selectedIds);
-      visitOrderIds = visitOrderIds.filter(id => setSel.has(id));
-      selectedIds.forEach(id => { if (!visitOrderIds.includes(id)) visitOrderIds.push(id); });
-    }
-
+    // ========= Start/End =========
     function updateStartEndSelectors() {
       const startSel = document.getElementById("start-select");
       const endSel = document.getElementById("end-select");
@@ -623,7 +555,6 @@
         <option value="__GEO__">📍 Mi ubicación</option>
         <option value="__NEW__">Nueva dirección...</option>
       `;
-
       addresses.forEach(a => {
         startSel.appendChild(new Option(a.address, a.id));
         endSel.appendChild(new Option(a.address, a.id));
@@ -704,113 +635,51 @@
       return { startPoint, endPoint };
     }
 
+    // ========= OSRM =========
     function toLonLat(points) { return points.map(p => `${p.lng},${p.lat}`).join(";"); }
-
     function sanitizePoints(points) {
       const cleaned = [];
       const EPS = 1e-6;
       for (const p of points) {
         if (!p || typeof p.lat !== "number" || typeof p.lng !== "number") continue;
-        if (Number.isNaN(p.lat) || Number.isNaN(p.lng)) continue;
         const last = cleaned[cleaned.length - 1];
         if (last && Math.abs(last.lat - p.lat) < EPS && Math.abs(last.lng - p.lng) < EPS) continue;
         cleaned.push(p);
       }
       return cleaned;
     }
-    function sameCoord(a, b) {
-      const EPS = 1e-6;
-      return a && b && Math.abs(a.lat - b.lat) < EPS && Math.abs(a.lng - b.lng) < EPS;
-    }
+    function sameCoord(a,b){ const EPS=1e-6; return a&&b&&Math.abs(a.lat-b.lat)<EPS&&Math.abs(a.lng-b.lng)<EPS; }
 
     async function osrmRouteDriving(points) {
       const pts = sanitizePoints(points);
       if (pts.length < 2) throw new Error("Necesitás al menos 2 puntos distintos.");
-
       const coords = toLonLat(pts);
       const url = `https://router.project-osrm.org/route/v1/driving/${coords}?overview=full&geometries=geojson&steps=true`;
       const res = await fetch(url);
-      if (!res.ok) {
-        const txt = await res.text().catch(() => "");
-        throw new Error(`OSRM route error (${res.status}). ${txt || ""}`.trim());
-      }
+      if (!res.ok) throw new Error(`OSRM route error (${res.status})`);
       return await res.json();
     }
 
-    async function osrmTableDriving(points) {
-      const pts = sanitizePoints(points);
-      if (pts.length < 2) throw new Error("Necesitás al menos 2 puntos distintos.");
-
-      const coords = toLonLat(pts);
-      const url = `https://router.project-osrm.org/table/v1/driving/${coords}?annotations=duration,distance`;
-      const res = await fetch(url);
-      if (!res.ok) {
-        const txt = await res.text().catch(() => "");
-        throw new Error(`OSRM table error (${res.status}). ${txt || ""}`.trim());
-      }
-      return await res.json();
+    // ========= Route draw + UI =========
+    function hideRoutePanel() {
+      document.getElementById("route-info").classList.add("hidden");
+      document.getElementById("route-fab").classList.remove("hidden");
     }
-
-    function solveOptimalPathFixedStartEnd(matrix, startIdx, endIdx, waypointIdxs) {
-      const n = waypointIdxs.length;
-      if (n === 0) return [startIdx, endIdx];
-
-      const DP = Array.from({ length: 1 << n }, () => Array(n).fill(Infinity));
-      const parent = Array.from({ length: 1 << n }, () => Array(n).fill(-1));
-
-      for (let i = 0; i < n; i++) {
-        const w = waypointIdxs[i];
-        DP[1 << i][i] = matrix[startIdx][w];
-      }
-
-      for (let mask = 0; mask < (1 << n); mask++) {
-        for (let last = 0; last < n; last++) {
-          if (!(mask & (1 << last))) continue;
-          const lastIdx = waypointIdxs[last];
-          const cost = DP[mask][last];
-          if (!isFinite(cost)) continue;
-
-          for (let nxt = 0; nxt < n; nxt++) {
-            if (mask & (1 << nxt)) continue;
-            const nxtIdx = waypointIdxs[nxt];
-            const nmask = mask | (1 << nxt);
-            const cand = cost + matrix[lastIdx][nxtIdx];
-            if (cand < DP[nmask][nxt]) {
-              DP[nmask][nxt] = cand;
-              parent[nmask][nxt] = last;
-            }
-          }
-        }
-      }
-
-      const full = (1 << n) - 1;
-      let bestLast = 0, bestCost = Infinity;
-
-      for (let last = 0; last < n; last++) {
-        const lastIdx = waypointIdxs[last];
-        const cand = DP[full][last] + matrix[lastIdx][endIdx];
-        if (cand < bestCost) { bestCost = cand; bestLast = last; }
-      }
-
-      const orderWaypoints = [];
-      let mask = full, cur = bestLast;
-      while (cur !== -1) {
-        orderWaypoints.push(waypointIdxs[cur]);
-        const prev = parent[mask][cur];
-        mask = mask & ~(1 << cur);
-        cur = prev;
-      }
-      orderWaypoints.reverse();
-      return [startIdx, ...orderWaypoints, endIdx];
+    function showRoutePanel() {
+      document.getElementById("route-info").classList.remove("hidden");
+      document.getElementById("route-fab").classList.add("hidden");
     }
 
     function clearRouteLayersOnly() {
       if (routeLayer) { map.removeLayer(routeLayer); routeLayer = null; }
       routeNumberMarkers.forEach(m => map.removeLayer(m));
       routeNumberMarkers = [];
-      lastOrderedRoutePoints = null;
-
+      lastRoutePoints = null;
+      lastRouteGeo = null;
+      lastRouteDurationSec = 0;
+      stopNavigation();
       hideRoutePanel();
+      document.getElementById("nav-panel").style.display = "none";
     }
 
     function drawRouteAndMarkers(orderedPoints, geojsonGeometry) {
@@ -832,29 +701,10 @@
       map.fitBounds(orderedPoints.map(p => [p.lat, p.lng]), { padding: [50, 50] });
     }
 
-    function showRoutePanel() {
-      document.getElementById("route-info").classList.remove("hidden");
-      document.getElementById("route-fab").classList.add("hidden");
-    }
-    function hideRoutePanel() {
-      document.getElementById("route-info").classList.add("hidden");
-      document.getElementById("route-fab").classList.remove("hidden");
-    }
-
-    function buildGoogleMapsUrl(points) {
-      // Google Maps: origin + destination + waypoints
-      const enc = (p) => encodeURIComponent(`${p.lat},${p.lng}`);
-      const origin = enc(points[0]);
-      const dest = enc(points[points.length - 1]);
-      const mid = points.slice(1, -1).map(enc);
-
-      let url = `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${dest}&travelmode=driving`;
-      if (mid.length) url += `&waypoints=${mid.join("%7C")}`; // | encoded
-      return url;
-    }
-
-    function showRouteInfo(orderedPoints, distKm, durMin) {
-      lastOrderedRoutePoints = orderedPoints;
+    function showRouteInfo(orderedPoints, distKm, durMin, geoGeom, durSec) {
+      lastRoutePoints = orderedPoints;
+      lastRouteGeo = geoGeom;
+      lastRouteDurationSec = durSec || (durMin*60);
 
       const details = document.getElementById("route-details");
       details.innerHTML = `
@@ -866,275 +716,151 @@
           <p class="text-xs text-slate-400 mt-1">Duración total: ${Math.round(durMin)} min</p>
         </div>
       `;
-
       showRoutePanel();
+
+      // ✅ mostrar navegación
+      document.getElementById("nav-panel").style.display = "block";
+      resetNavigation();
     }
 
-    function buildMidpointsFromVisitOrder() {
-      syncVisitOrderWithSelected();
-      return visitOrderIds
+    function buildPointsForRoute() {
+      const mid = selectedIds
         .map(id => addresses.find(a => a.id === id))
         .filter(Boolean)
         .filter(a => a.lat && a.lng)
-        .map(a => ({ lat: a.lat, lng: a.lng, address: a.address, _id: a.id }));
+        .map(a => ({ lat: a.lat, lng: a.lng, address: a.address }));
+
+      // sacar duplicados con start/end
+      const filteredMid = mid.filter(p => !sameCoord(p, startPoint) && !sameCoord(p, endPoint));
+      return sanitizePoints([startPoint, ...filteredMid, endPoint]);
     }
 
-    async function calculateWithUserOrder() {
-      const btn = document.getElementById("calc-route-btn");
+    async function calculateRoute() {
       try {
-        setButtonLoading(btn, true, "Calcular");
-        setLoading(true, "Calculando ruta…", "Respetando tu orden");
-
+        setLoading(true, "Calculando ruta…", "OSRM");
         await resolveStartEnd();
-        let mid = buildMidpointsFromVisitOrder();
-        if (!mid.length) throw new Error("No hay puntos intermedios válidos");
 
-        mid = mid.filter(p => !sameCoord(p, startPoint) && !sameCoord(p, endPoint));
-        const points = sanitizePoints([startPoint, ...mid, endPoint]);
-        if (points.length < 2) throw new Error("Inicio/fin iguales o puntos inválidos");
+        const points = buildPointsForRoute();
+        if (points.length < 2) throw new Error("Ruta inválida");
 
-        setLoading(true, "Trazando ruta por calles…", "OSRM Route");
         const routeRes = await osrmRouteDriving(points);
-        if (!routeRes.routes?.length) throw new Error("OSRM route vacío");
+        const route = routeRes.routes?.[0];
+        if (!route) throw new Error("No se encontró ruta");
 
-        const route = routeRes.routes[0];
         drawRouteAndMarkers(points, route.geometry);
-        showRouteInfo(points, route.distance / 1000, route.duration / 60);
+        showRouteInfo(points, route.distance/1000, route.duration/60, route.geometry, route.duration);
 
         setLoading(false);
         showToast("Ruta calculada ✅", "success");
       } catch (e) {
         setLoading(false);
         showToast(e.message || "Error", "error");
-      } finally {
-        setButtonLoading(btn, false, "Calcular");
       }
     }
 
-    async function optimizeRoute() {
-      const btn = document.getElementById("optimize-route-btn");
-      try {
-        setButtonLoading(btn, true, "Optimizar");
-        setLoading(true, "Optimizando recorrido…", "Preparando puntos");
+    // ========= NAVIGATION (simulada sobre geometría) =========
+    function resetNavigation() {
+      navT = 0;
+      updateNavUI();
+      if (navMarker) { map.removeLayer(navMarker); navMarker = null; }
+      const p = getPointOnRoute(0);
+      if (p) navMarker = L.circleMarker([p.lat, p.lng], { radius: 8, weight: 2, color: "#fff", fillColor: "#22c55e", fillOpacity: 1 }).addTo(map);
+    }
 
-        await resolveStartEnd();
-        let mid = buildMidpointsFromVisitOrder();
-        if (!mid.length) throw new Error("No hay puntos intermedios válidos");
+    function stopNavigation() {
+      navPlaying = false;
+      if (navTimer) { clearInterval(navTimer); navTimer = null; }
+      const btn = document.getElementById("nav-toggle");
+      if (btn) btn.textContent = "▶︎ Play";
+      const status = document.getElementById("nav-eta");
+      if (status) status.textContent = "—";
+    }
 
-        mid = mid.filter(p => !sameCoord(p, startPoint) && !sameCoord(p, endPoint));
-        const basePoints = sanitizePoints([startPoint, ...mid, endPoint]);
-        if (basePoints.length < 2) throw new Error("Inicio/fin iguales o puntos inválidos");
+    function updateNavUI() {
+      const progress = document.getElementById("nav-progress");
+      const pct = Math.round(navT * 100);
+      progress.value = String(pct);
+      document.getElementById("nav-status").textContent = `${pct}%`;
 
-        if (basePoints.length < 3) {
-          setLoading(true, "Trazando ruta directa…", "OSRM Route");
-          const routeRes = await osrmRouteDriving(basePoints);
-          const route = routeRes.routes[0];
-          drawRouteAndMarkers(basePoints, route.geometry);
-          showRouteInfo(basePoints, route.distance/1000, route.duration/60);
-          setLoading(false);
-          showToast("Ruta optimizada ✅", "success");
-          return;
+      // ETA estimada según duración OSRM
+      const remaining = Math.max(0, (1 - navT) * (lastRouteDurationSec || 0));
+      if (lastRouteDurationSec) {
+        const min = Math.round(remaining / 60);
+        document.getElementById("nav-eta").textContent = `ETA ~${min} min`;
+      } else {
+        document.getElementById("nav-eta").textContent = "—";
+      }
+    }
+
+    function getPointOnRoute(t01) {
+      // toma la geometría LineString (geojson) y devuelve punto interpolado
+      if (!lastRouteGeo?.coordinates?.length) return null;
+      const coords = lastRouteGeo.coordinates; // [lon,lat]
+      // construir longitudes acumuladas
+      let total = 0;
+      const segLen = [];
+      for (let i = 0; i < coords.length - 1; i++) {
+        const a = coords[i], b = coords[i+1];
+        const dx = b[0]-a[0], dy = b[1]-a[1];
+        const l = Math.sqrt(dx*dx + dy*dy);
+        segLen.push(l);
+        total += l;
+      }
+      if (total === 0) return { lat: coords[0][1], lng: coords[0][0] };
+
+      const target = t01 * total;
+      let acc = 0;
+      for (let i = 0; i < segLen.length; i++) {
+        const l = segLen[i];
+        if (acc + l >= target) {
+          const a = coords[i], b = coords[i+1];
+          const r = (target - acc) / l;
+          const lon = a[0] + (b[0]-a[0]) * r;
+          const lat = a[1] + (b[1]-a[1]) * r;
+          return { lat, lng: lon };
         }
+        acc += l;
+      }
+      const last = coords[coords.length-1];
+      return { lat: last[1], lng: last[0] };
+    }
 
-        setLoading(true, "Calculando matriz…", "OSRM Table");
-        const table = await osrmTableDriving(basePoints);
-        const durations = table.durations;
-        if (!durations) throw new Error("OSRM no devolvió durations");
+    function navTick() {
+      const speed = parseFloat(document.getElementById("nav-speed").value || "1");
+      // avanzamos en base al tiempo: 60s de sim por recorrido completo a x1 (ajustable)
+      const dt = (0.004 * speed); // ~250 ticks para completar
+      navT = Math.min(1, navT + dt);
 
-        setLoading(true, "Buscando mejor orden…", "DP exacto");
-        const startIdx = 0;
-        const endIdx = basePoints.length - 1;
-        const waypointIdxs = [];
-        for (let i = 1; i < basePoints.length - 1; i++) waypointIdxs.push(i);
+      const p = getPointOnRoute(navT);
+      if (p && navMarker) {
+        navMarker.setLatLng([p.lat, p.lng]);
+        map.panTo([p.lat, p.lng], { animate: true, duration: 0.25 });
+      }
+      updateNavUI();
 
-        const orderIdxs = solveOptimalPathFixedStartEnd(durations, startIdx, endIdx, waypointIdxs);
-        const orderedPoints = orderIdxs.map(i => basePoints[i]);
-
-        setLoading(true, "Trazando ruta final…", "OSRM Route");
-        const routeRes = await osrmRouteDriving(orderedPoints);
-        if (!routeRes.routes?.length) throw new Error("OSRM route vacío");
-
-        const route = routeRes.routes[0];
-        drawRouteAndMarkers(orderedPoints, route.geometry);
-        showRouteInfo(orderedPoints, route.distance / 1000, route.duration / 60);
-
-        setLoading(false);
-        showToast("Ruta optimizada ✅", "success");
-      } catch (e) {
-        setLoading(false);
-        showToast(e.message || "Error", "error");
-      } finally {
-        setButtonLoading(btn, false, "Optimizar");
+      if (navT >= 1) {
+        stopNavigation();
+        showToast("Navegación finalizada ✅", "success");
       }
     }
 
-    function renderAddressList() {
-      const container = document.getElementById("address-list");
-      const filtered = getFilteredAddresses();
+    function toggleNavigation() {
+      if (!lastRouteGeo) return showToast("Primero calculá una ruta", "warning");
+      const btn = document.getElementById("nav-toggle");
 
-      if (!filtered.length) {
-        container.innerHTML = `<div class="text-center py-6 text-slate-500">
-          <p>${addresses.length ? "No hay resultados con los filtros actuales" : "No hay direcciones cargadas"}</p>
-        </div>`;
-        return;
+      if (!navPlaying) {
+        navPlaying = true;
+        btn.textContent = "⏸ Pause";
+        if (!navMarker) resetNavigation();
+        navTimer = setInterval(navTick, 250);
+      } else {
+        navPlaying = false;
+        btn.textContent = "▶︎ Play";
+        if (navTimer) { clearInterval(navTimer); navTimer = null; }
       }
-
-      container.innerHTML = filtered.map(addr => {
-        const isSelected = selectedIds.includes(addr.id);
-        const orderNum = visitOrderIds.indexOf(addr.id) + 1;
-        return `
-          <div class="address-card bg-slate-700/40 rounded-xl p-3 cursor-pointer transition-all border-2 ${isSelected ? "border-indigo-500" : "border-transparent"}"
-               data-id="${escapeAttr(addr.id)}">
-            <div class="flex items-start gap-3">
-              <div class="w-8 h-8 rounded-lg ${isSelected ? "bg-indigo-500" : "bg-slate-600"} flex items-center justify-center flex-shrink-0">
-                ${isSelected ? `<span class="font-bold text-sm">${orderNum || ""}</span>` : "📍"}
-              </div>
-              <div class="flex-1 min-w-0">
-                <p class="font-medium text-sm truncate">${escapeHtml(addr.address)}</p>
-                <p class="text-xs text-slate-400 mt-1">${escapeHtml(addr.zone || "Sin zona")} • ${escapeHtml(addr.postal_code || "Sin CP")}</p>
-              </div>
-              <button class="delete-btn p-1.5 rounded-lg hover:bg-slate-600 transition-all opacity-70 hover:opacity-100" data-del="${escapeAttr(addr.id)}" title="Eliminar">🗑️</button>
-            </div>
-          </div>
-        `;
-      }).join("");
-
-      container.querySelectorAll(".address-card").forEach(card => {
-        const id = card.getAttribute("data-id");
-        card.addEventListener("click", (e) => {
-          if (e.target.closest(".delete-btn")) return;
-          toggleAddressSelection(id);
-        });
-      });
-
-      container.querySelectorAll(".delete-btn").forEach(btn => {
-        btn.addEventListener("click", (e) => {
-          e.stopPropagation();
-          showDeleteModal(btn.getAttribute("data-del"));
-        });
-      });
     }
 
-    function renderRouteOrder() {
-      const box = document.getElementById("route-order");
-      syncVisitOrderWithSelected();
-
-      if (!visitOrderIds.length) {
-        box.innerHTML = `<p class="text-xs text-slate-500">Seleccioná direcciones para armar el orden acá.</p>`;
-        return;
-      }
-
-      box.innerHTML = visitOrderIds.map((id, idx) => {
-        const a = addresses.find(x => x.id === id);
-        if (!a) return "";
-        return `
-          <div class="bg-slate-900/30 border border-slate-700 rounded-xl p-2 flex items-center gap-2"
-               draggable="true" data-dnd="${escapeAttr(id)}">
-            <div class="w-7 h-7 rounded-lg bg-indigo-500/20 text-indigo-300 flex items-center justify-center font-bold text-xs">${idx+1}</div>
-            <div class="flex-1 min-w-0">
-              <div class="text-sm truncate">${escapeHtml(a.address)}</div>
-              <div class="text-xs text-slate-400 truncate">${escapeHtml(a.zone || "—")} • ${escapeHtml(a.postal_code || "—")}</div>
-            </div>
-            <div class="text-slate-400 cursor-grab select-none" title="Arrastrar">⠿</div>
-          </div>
-        `;
-      }).join("");
-
-      let draggingId = null;
-      box.querySelectorAll("[data-dnd]").forEach(el => {
-        el.addEventListener("dragstart", () => { draggingId = el.getAttribute("data-dnd"); el.classList.add("dragging"); });
-        el.addEventListener("dragend", () => {
-          draggingId = null;
-          el.classList.remove("dragging");
-          box.querySelectorAll("[data-dnd]").forEach(x => x.classList.remove("drop-hint"));
-        });
-
-        el.addEventListener("dragover", (e) => { e.preventDefault(); el.classList.add("drop-hint"); });
-        el.addEventListener("dragleave", () => el.classList.remove("drop-hint"));
-
-        el.addEventListener("drop", (e) => {
-          e.preventDefault();
-          el.classList.remove("drop-hint");
-          const targetId = el.getAttribute("data-dnd");
-          if (!draggingId || draggingId === targetId) return;
-
-          const from = visitOrderIds.indexOf(draggingId);
-          const to = visitOrderIds.indexOf(targetId);
-          if (from < 0 || to < 0) return;
-
-          const [moved] = visitOrderIds.splice(from, 1);
-          visitOrderIds.splice(to, 0, moved);
-
-          renderRouteOrder();
-          updateUI();
-        });
-      });
-    }
-
-    function showDeleteModal(id) {
-      deleteTargetId = id;
-      const addr = addresses.find(a => a.id === id);
-      document.getElementById("delete-address-text").textContent = addr ? addr.address : "Esta dirección";
-      document.getElementById("delete-modal").classList.remove("hidden");
-    }
-    function hideDeleteModal() {
-      deleteTargetId = null;
-      document.getElementById("delete-modal").classList.add("hidden");
-    }
-    function deleteAddress() {
-      if (!deleteTargetId) return;
-      const id = deleteTargetId;
-
-      addresses = addresses.filter(a => a.id !== id);
-      selectedIds = selectedIds.filter(x => x !== id);
-      visitOrderIds = visitOrderIds.filter(x => x !== id);
-
-      hideDeleteModal();
-      saveState();
-      updateFilters();
-      updateUI();
-      updateMarkers();
-      showToast("Dirección eliminada ✅", "success");
-    }
-
-    async function handleFormSubmit(e) {
-      e.preventDefault();
-      if (addresses.length >= config.maxAddresses) return showToast("Límite alcanzado", "warning");
-
-      const addressInput = document.getElementById("address-input");
-      const zoneInput = document.getElementById("zone-input");
-      const postalInput = document.getElementById("postal-input");
-
-      const address = addressInput.value.trim();
-      if (!address) return showToast("Ingresá una dirección", "warning");
-
-      setLoading(true, "Geocodificando…", address);
-      const coords = await geocodeAddress(normalizeAddressForGeocode(address));
-      if (!coords) { setLoading(false); return showToast("No pude geocodificar", "error"); }
-
-      const id = (crypto.randomUUID ? crypto.randomUUID() : (Date.now().toString() + Math.random().toString(16).slice(2)));
-      addresses.push({
-        id,
-        address,
-        zone: zoneInput.value.trim() || "",
-        postal_code: postalInput.value.trim() || "",
-        lat: coords.lat,
-        lng: coords.lng,
-        created_at: new Date().toISOString()
-      });
-
-      addressInput.value = "";
-      zoneInput.value = "";
-      postalInput.value = "";
-
-      saveState();
-      updateFilters();
-      updateUI();
-      updateMarkers();
-      setLoading(false);
-      showToast("Dirección agregada ✅", "success");
-    }
-
+    // ========= Import =========
     function setupImportHandlers() {
       const toggleBtn = document.getElementById("toggle-import-form");
       const importSection = document.getElementById("import-form-section");
@@ -1152,22 +878,18 @@
       });
 
       dropZone.addEventListener("click", () => fileInput.click());
-
       ["dragenter","dragover","dragleave","drop"].forEach(name => {
         dropZone.addEventListener(name, (e) => { e.preventDefault(); e.stopPropagation(); });
       });
-
       dropZone.addEventListener("drop", (e) => {
         const files = e.dataTransfer.files;
         if (files && files.length) { fileInput.files = files; handleFileSelect(files[0]); }
       });
-
       fileInput.addEventListener("change", (e) => {
         if (e.target.files && e.target.files.length) handleFileSelect(e.target.files[0]);
       });
 
       document.getElementById("import-btn").addEventListener("click", processImport);
-
       cancelBtn.addEventListener("click", () => {
         importSection.classList.add("hidden");
         fileInput.value = "";
@@ -1192,19 +914,16 @@
       }
       return out;
     }
-
     function parseXLSX(arrayBuffer) {
       const wb = XLSX.read(arrayBuffer, { type: "array" });
       const ws = wb.Sheets[wb.SheetNames[0]];
       return XLSX.utils.sheet_to_json(ws, { defval: "" });
     }
-
     function populateColumnSelectors(data) {
       const headers = Object.keys(data[0] || {});
       const addressSel = document.getElementById("address-column");
       const zoneSel = document.getElementById("zone-column");
       const postalSel = document.getElementById("postal-column");
-
       addressSel.innerHTML = `<option value="">Columna Dirección</option>`;
       zoneSel.innerHTML = `<option value="">Columna Zona (opcional)</option>`;
       postalSel.innerHTML = `<option value="">Columna Código Postal (opcional)</option>`;
@@ -1219,7 +938,6 @@
         if (low.includes("postal") || low.includes("codigo") || low.includes("zip") || low.includes("cap")) postalSel.value = h;
       });
     }
-
     function handleFileSelect(file) {
       document.getElementById("file-name").textContent = file.name;
       const reader = new FileReader();
@@ -1245,20 +963,15 @@
 
     async function processImport() {
       if (!importedData?.length) return showToast("No hay datos", "warning");
-
       const addressCol = document.getElementById("address-column").value;
       const zoneCol = document.getElementById("zone-column").value;
       const postalCol = document.getElementById("postal-column").value;
       if (!addressCol) return showToast("Elegí columna Dirección", "warning");
 
-      if (addresses.length + importedData.length > config.maxAddresses)
-        return showToast(`Solo podés agregar ${config.maxAddresses - addresses.length} más`, "warning");
-
       const importBtn = document.getElementById("import-btn");
       importBtn.disabled = true;
 
       let ok = 0, err = 0;
-
       for (let i = 0; i < importedData.length; i++) {
         const row = importedData[i];
         const addr = (row[addressCol] ?? "").toString().trim();
@@ -1276,8 +989,7 @@
           zone: zoneCol ? (row[zoneCol] ?? "").toString().trim() : "",
           postal_code: postalCol ? (row[postalCol] ?? "").toString().trim() : "",
           lat: coords.lat,
-          lng: coords.lng,
-          created_at: new Date().toISOString()
+          lng: coords.lng
         });
 
         ok++;
@@ -1286,28 +998,50 @@
 
       importBtn.disabled = false;
       setLoading(false);
-
-      document.getElementById("import-form-section").classList.add("hidden");
-      document.getElementById("file-input").value = "";
-      document.getElementById("file-preview").classList.add("hidden");
-      importedData = null;
-
       saveState();
-      updateFilters();
       updateUI();
       updateMarkers();
-
       showToast(`Import: ${ok} ok${err ? ` • ${err} errores` : ""}`, ok ? "success" : "error");
+    }
+
+    // ========= UI =========
+    function renderAddressList() {
+      const container = document.getElementById("address-list");
+      if (!addresses.length) {
+        container.innerHTML = `<div class="text-center py-6 text-slate-500">No hay direcciones cargadas</div>`;
+        return;
+      }
+      container.innerHTML = addresses.map(a => {
+        const sel = selectedIds.includes(a.id);
+        return `
+          <div class="address-card bg-slate-700/40 rounded-xl p-3 cursor-pointer border-2 ${sel ? "border-indigo-500" : "border-transparent"}"
+               data-id="${a.id}">
+            <div class="flex items-center gap-3">
+              <div class="w-8 h-8 rounded-lg ${sel ? "bg-indigo-500" : "bg-slate-600"} flex items-center justify-center">
+                ${sel ? "✓" : "📍"}
+              </div>
+              <div class="flex-1 min-w-0">
+                <p class="font-medium text-sm truncate">${escapeHtml(a.address)}</p>
+                <p class="text-xs text-slate-400 mt-1">${escapeHtml(a.zone || "—")} • ${escapeHtml(a.postal_code || "—")}</p>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join("");
+
+      container.querySelectorAll("[data-id]").forEach(el => {
+        el.addEventListener("click", () => toggleAddressSelection(el.getAttribute("data-id")));
+      });
     }
 
     function updateUI() {
       document.getElementById("address-count").textContent = `${addresses.length} direccion${addresses.length !== 1 ? "es" : ""}`;
       document.getElementById("selected-count").textContent = `${selectedIds.length}/${config.maxRoutePoints}`;
-      updateStartEndSelectors();
       renderAddressList();
-      renderRouteOrder();
+      updateStartEndSelectors();
     }
 
+    // ========= Mobile sidebar =========
     function setupMobileSidebar() {
       const sidebar = document.getElementById("sidebar");
       const backdrop = document.getElementById("sidebar-backdrop");
@@ -1321,81 +1055,105 @@
         sidebar.classList.add("-translate-x-full");
         backdrop.classList.add("hidden");
       }
-      function isSidebarOpen() {
-        return !sidebar.classList.contains("-translate-x-full");
-      }
+      function isSidebarOpen() { return !sidebar.classList.contains("-translate-x-full"); }
 
       toggleBtn.addEventListener("click", (e) => {
         e.stopPropagation();
-        if (isSidebarOpen()) closeSidebar();
-        else openSidebar();
+        isSidebarOpen() ? closeSidebar() : openSidebar();
       });
-
       backdrop.addEventListener("click", closeSidebar);
-      document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeSidebar(); });
 
       document.getElementById("map").addEventListener("click", () => {
         if (window.innerWidth < 1024 && isSidebarOpen()) closeSidebar();
       });
     }
 
+    // ========= Actions =========
+    async function handleFormSubmit(e) {
+      e.preventDefault();
+      const address = document.getElementById("address-input").value.trim();
+      if (!address) return showToast("Ingresá una dirección", "warning");
+
+      setLoading(true, "Geocodificando…", address);
+      const coords = await geocodeAddress(normalizeAddressForGeocode(address));
+      if (!coords) { setLoading(false); return showToast("No pude geocodificar", "error"); }
+
+      const id = (crypto.randomUUID ? crypto.randomUUID() : (Date.now().toString() + Math.random().toString(16).slice(2)));
+      addresses.push({
+        id,
+        address,
+        zone: document.getElementById("zone-input").value.trim() || "",
+        postal_code: document.getElementById("postal-input").value.trim() || "",
+        lat: coords.lat,
+        lng: coords.lng
+      });
+
+      document.getElementById("address-input").value = "";
+      document.getElementById("zone-input").value = "";
+      document.getElementById("postal-input").value = "";
+
+      saveState();
+      updateUI();
+      updateMarkers();
+      setLoading(false);
+      showToast("Dirección agregada ✅", "success");
+    }
+
+    // ========= Init =========
     function init() {
       loadGeocodeCache();
       loadState();
       initMap();
-      updateFilters();
-      updateUI();
-      updateMarkers();
       setupMobileSidebar();
       setupImportHandlers();
 
-      document.getElementById("address-form").addEventListener("submit", handleFormSubmit);
+      updateUI();
+      updateMarkers();
 
+      document.getElementById("address-form").addEventListener("submit", handleFormSubmit);
       document.getElementById("start-select").addEventListener("change", updateStartEndSelectors);
       document.getElementById("end-select").addEventListener("change", updateStartEndSelectors);
 
-      document.getElementById("zone-filter").addEventListener("change", () => { updateUI(); updateMarkers(); });
-      document.getElementById("postal-filter").addEventListener("change", () => { updateUI(); updateMarkers(); });
-      document.getElementById("distance-filter").addEventListener("input", (e) => {
-        document.getElementById("distance-value").textContent = e.target.value;
-        updateUI(); updateMarkers();
-      });
-      document.getElementById("reset-filters").addEventListener("click", () => {
-        document.getElementById("zone-filter").value = "";
-        document.getElementById("postal-filter").value = "";
-        document.getElementById("distance-filter").value = "50";
-        document.getElementById("distance-value").textContent = "50";
-        updateUI(); updateMarkers();
-      });
-
-      document.getElementById("calc-route-btn").addEventListener("click", calculateWithUserOrder);
-      document.getElementById("optimize-route-btn").addEventListener("click", optimizeRoute);
+      document.getElementById("calc-route-btn").addEventListener("click", calculateRoute);
+      document.getElementById("optimize-route-btn").addEventListener("click", calculateRoute);
 
       document.getElementById("clear-route-btn").addEventListener("click", () => {
         selectedIds = [];
-        visitOrderIds = [];
+        updateUI();
+        updateMarkers();
         clearRouteLayersOnly();
-        updateUI(); updateMarkers();
-        showToast("Selección y ruta limpiadas", "info");
+        showToast("Ruta limpiada", "info");
       });
 
-      document.getElementById("cancel-delete").addEventListener("click", hideDeleteModal);
-      document.getElementById("confirm-delete").addEventListener("click", deleteAddress);
-
-      // ✅ Route panel UX
       document.getElementById("close-route-panel").addEventListener("click", hideRoutePanel);
       document.getElementById("route-fab").addEventListener("click", showRoutePanel);
 
       document.getElementById("open-gmaps-btn").addEventListener("click", () => {
-        if (!lastOrderedRoutePoints || lastOrderedRoutePoints.length < 2) {
-          showToast("Primero calculá una ruta", "warning");
-          return;
-        }
-        const url = buildGoogleMapsUrl(lastOrderedRoutePoints);
+        if (!lastRoutePoints || lastRoutePoints.length < 2) return showToast("Primero calculá una ruta", "warning");
+        const origin = `${lastRoutePoints[0].lat},${lastRoutePoints[0].lng}`;
+        const dest = `${lastRoutePoints[lastRoutePoints.length-1].lat},${lastRoutePoints[lastRoutePoints.length-1].lng}`;
+        const mid = lastRoutePoints.slice(1,-1).map(p => `${p.lat},${p.lng}`).map(encodeURIComponent).join("%7C");
+        let url = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(dest)}&travelmode=driving`;
+        if (mid) url += `&waypoints=${mid}`;
         window.open(url, "_blank", "noopener,noreferrer");
       });
 
-      showToast("UX fix ✅ Route panel responsive + botón Ruta", "success");
+      // Nav controls
+      document.getElementById("nav-toggle").addEventListener("click", toggleNavigation);
+      document.getElementById("nav-stop").addEventListener("click", () => { stopNavigation(); resetNavigation(); });
+      document.getElementById("nav-progress").addEventListener("input", (e) => {
+        if (!lastRouteGeo) return;
+        navT = Math.max(0, Math.min(1, parseInt(e.target.value,10)/100));
+        const p = getPointOnRoute(navT);
+        if (p) {
+          if (!navMarker) resetNavigation();
+          navMarker.setLatLng([p.lat, p.lng]);
+          map.panTo([p.lat, p.lng], { animate: true, duration: 0.25 });
+        }
+        updateNavUI();
+      });
+
+      showToast("Z-Index FIX ✅ + Modo navegación visible ✅", "success");
     }
 
     init();
