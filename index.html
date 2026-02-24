@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="es" class="h-full">
+<html lang="it" class="h-full">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Planificador de Rutas — Beta</title>
+  <title>Pianificatore Percorsi — Beta</title>
 
   <script src="https://cdn.tailwindcss.com/3.4.17"></script>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -17,16 +17,11 @@
     body { overflow: hidden; box-sizing: border-box; }
     .leaflet-container { background: #0b1220; }
 
-    /* ====== Z-INDEX FIX (CRÍTICO) ======
-       Leaflet panes/controls suelen usar z-index altos (200-1000).
-       Nosotros forzamos el mapa a estar por debajo del sidebar y overlays UI.
-    */
     #map { position: absolute; inset: 0; z-index: 1; }
-    .leaflet-control-container { z-index: 2 !important; } /* controles sobre mapa, pero bajo sidebar */
+    .leaflet-control-container { z-index: 2 !important; }
     .leaflet-pane { z-index: 1 !important; }
     .leaflet-top, .leaflet-bottom { z-index: 2 !important; }
 
-    /* Sidebar y overlays SIEMPRE arriba */
     #sidebar { z-index: 60; }
     #sidebar-backdrop { z-index: 55; }
     #route-info { z-index: 40; }
@@ -35,24 +30,54 @@
     #loading { z-index: 70; }
     #toast-container { z-index: 80; }
 
-    /* Scrollbar */
     .nice-scroll::-webkit-scrollbar { width: 10px; }
     .nice-scroll::-webkit-scrollbar-track { background: rgba(148,163,184,0.08); border-radius: 999px; }
     .nice-scroll::-webkit-scrollbar-thumb { background: rgba(148,163,184,0.25); border-radius: 999px; }
     .nice-scroll::-webkit-scrollbar-thumb:hover { background: rgba(148,163,184,0.35); }
 
     .custom-marker {
+      width: 24px; height: 24px;
       background: linear-gradient(135deg, #6366f1, #8b5cf6);
       border: 3px solid #fff;
       border-radius: 50%;
       box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4);
-      width: 24px; height: 24px;
     }
     .selected-marker {
       background: linear-gradient(135deg, #f59e0b, #ef4444) !important;
       animation: pulse 1.5s infinite;
     }
     @keyframes pulse { 0%,100%{transform:scale(1)} 50%{transform:scale(1.1)} }
+
+    .route-badge-wrap { position: relative; width: 28px; height: 28px; }
+    .route-badge-wrap .dot {
+      position: absolute;
+      left: 50%; top: 50%;
+      transform: translate(-50%, -50%);
+      width: 24px; height: 24px;
+      border-radius: 50%;
+      border: 3px solid #fff;
+      box-shadow: 0 4px 12px rgba(99, 102, 241, 0.35);
+      background: linear-gradient(135deg, #6366f1, #8b5cf6);
+    }
+    .route-badge-wrap.selected .dot {
+      background: linear-gradient(135deg, #f59e0b, #ef4444);
+    }
+    .route-badge-wrap .badge {
+      position: absolute;
+      right: -6px;
+      top: -6px;
+      width: 20px; height: 20px;
+      border-radius: 999px;
+      border: 2px solid rgba(255,255,255,0.95);
+      background: rgba(15,23,42,0.95);
+      color: #fff;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 800;
+      font-size: 11px;
+      box-shadow: 0 8px 22px rgba(0,0,0,0.35);
+    }
+    .route-badge-wrap .badge.start { background: rgba(16,185,129,0.95); }
+    .route-badge-wrap .badge.end { background: rgba(239,68,68,0.95); }
 
     .toast { animation: slideIn 0.25s ease-out; }
     @keyframes slideIn { from{transform:translateX(100%);opacity:0} to{transform:translateX(0);opacity:1} }
@@ -61,20 +86,13 @@
     .btn-primary { background: linear-gradient(135deg, #6366f1, #8b5cf6); transition: all 0.2s ease; }
     .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(99, 102, 241, 0.35); }
 
-    .dragging { opacity: 0.55; }
-    .drop-hint { outline: 2px dashed rgba(99,102,241,0.9); outline-offset: 2px; }
-
-    /* ✅ Route panel: desktop side + mobile bottom sheet */
-    #route-info {
-      max-height: 70vh;
-      overflow: auto;
-    }
+    #route-info { max-height: 70vh; overflow: auto; }
     @media (max-width: 1023px) {
       #route-info {
         top: auto !important;
         right: 12px !important;
         left: 12px !important;
-        bottom: 86px !important; /* deja espacio para nav-panel */
+        bottom: 86px !important;
         width: auto !important;
         max-width: none !important;
         max-height: 38vh !important;
@@ -82,7 +100,6 @@
       }
     }
 
-    /* ✅ Nav panel (siempre abajo cuando hay ruta) */
     #nav-panel {
       position: absolute;
       left: 12px;
@@ -105,15 +122,19 @@
       }
     }
 
-    /* Sidebar scroll sólido */
-    #sidebar-scroll { overscroll-behavior: contain; }
-
+    .leaflet-tooltip {
+      background: rgba(15,23,42,0.95);
+      color: #fff;
+      border: 1px solid rgba(148,163,184,0.25);
+      border-radius: 12px;
+      padding: 8px 10px;
+      box-shadow: 0 18px 50px rgba(0,0,0,0.35);
+    }
   </style>
 </head>
 
 <body class="h-full bg-slate-900 text-white overflow-hidden">
   <div id="app" class="h-full flex flex-col">
-    <!-- Header -->
     <header class="bg-slate-800/80 backdrop-blur-lg border-b border-slate-700 px-4 py-3 flex items-center justify-between flex-shrink-0">
       <div class="flex items-center gap-3">
         <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center">
@@ -123,13 +144,13 @@
           </svg>
         </div>
         <h1 class="text-xl font-bold bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">
-          Planificador de Rutas — Beta
+          Pianificatore Percorsi — Beta
         </h1>
       </div>
 
       <div class="flex items-center gap-2">
-        <span id="address-count" class="text-sm text-slate-400">0 direcciones</span>
-        <button id="toggle-panel" class="lg:hidden p-2 rounded-lg bg-slate-700 hover:bg-slate-600" title="Abrir panel">
+        <span id="address-count" class="text-sm text-slate-400">0 indirizzi</span>
+        <button id="toggle-panel" class="lg:hidden p-2 rounded-lg bg-slate-700 hover:bg-slate-600" title="Apri pannello">
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
           </svg>
@@ -137,12 +158,9 @@
       </div>
     </header>
 
-    <!-- Main -->
     <main class="flex-1 flex overflow-hidden relative">
-      <!-- Backdrop mobile -->
       <div id="sidebar-backdrop" class="fixed inset-0 bg-black/60 hidden lg:hidden"></div>
 
-      <!-- Sidebar -->
       <aside id="sidebar"
         class="fixed lg:relative inset-y-0 left-0
                w-[min(420px,92vw)] lg:w-[420px]
@@ -153,197 +171,196 @@
                transition-transform duration-200 ease-out">
 
         <div id="sidebar-scroll" class="flex-1 overflow-y-auto nice-scroll">
-          <!-- Add Address -->
+
           <div class="p-4 border-b border-slate-700">
-            <div class="flex items-center justify-between mb-3">
-              <h2 class="text-sm font-semibold text-slate-400 uppercase tracking-wider">Nueva Dirección</h2>
-              <div class="flex gap-2">
-                <button id="backup-btn" class="text-xs px-2 py-1 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-200">
-                  Backup JSON
-                </button>
-                <button id="clear-all-btn" class="text-xs px-2 py-1 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-200">
-                  Limpiar todo
-                </button>
-              </div>
-            </div>
-
-            <form id="address-form" class="space-y-3 relative">
-              <input type="text" id="address-input" placeholder="Dirección completa..."
+            <h2 class="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-3">Nuovo Indirizzo</h2>
+            <form id="address-form" class="space-y-3">
+              <input type="text" id="company-input" placeholder="Azienda"
                 class="w-full px-4 py-3 bg-slate-700/50 border border-slate-600 rounded-xl focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all" />
-
+              <input type="text" id="address-input" placeholder="Indirizzo completo..."
+                class="w-full px-4 py-3 bg-slate-700/50 border border-slate-600 rounded-xl focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all" />
               <div class="grid grid-cols-2 gap-3">
                 <input type="text" id="zone-input" placeholder="Zona"
                   class="px-4 py-2.5 bg-slate-700/50 border border-slate-600 rounded-xl focus:outline-none focus:border-indigo-500 transition-all" />
-                <input type="text" id="postal-input" placeholder="Código Postal"
+                <input type="text" id="postal-input" placeholder="CAP"
                   class="px-4 py-2.5 bg-slate-700/50 border border-slate-600 rounded-xl focus:outline-none focus:border-indigo-500 transition-all" />
               </div>
-
               <button type="submit" class="w-full py-3 btn-primary text-white font-semibold rounded-xl">
-                Agregar Dirección
+                Aggiungi Indirizzo
               </button>
             </form>
 
-            <div class="grid grid-cols-2 gap-2 mt-3">
-              <button id="toggle-import-form"
-                class="py-2.5 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-xl transition-all text-sm">
-                Importar CSV/Excel
-              </button>
-              <span class="py-2.5 bg-slate-700/60 text-white/70 font-semibold rounded-xl text-sm flex items-center justify-center">
-                (Excel OK)
-              </span>
-            </div>
+            <button id="toggle-import-form"
+              class="w-full mt-3 py-2.5 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-xl transition-all text-sm">
+              Importa CSV/Excel
+            </button>
 
             <label class="flex items-center gap-2 text-xs text-slate-300 mt-3">
               <input type="checkbox" id="append-bologna" class="accent-indigo-500" checked />
-              Autocompletar geocode: agregar “, Bologna, Italia” si no está
+              Autocompleta geocode: aggiungi “, Bologna, Italia” se non presente
             </label>
           </div>
 
-          <!-- Import -->
           <div id="import-form-section" class="p-4 border-b border-slate-700 hidden">
-            <h2 class="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-3">Importar Direcciones</h2>
+            <h2 class="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-3">Importa Indirizzi</h2>
             <div class="space-y-3">
               <div class="border-2 border-dashed border-slate-600 rounded-xl p-4 text-center cursor-pointer hover:border-indigo-500 transition-all"
                 id="drop-zone">
-                <p class="text-sm font-medium">Arrastra tu archivo aquí</p>
-                <p class="text-xs text-slate-400 mt-1">O haz clic para seleccionar</p>
+                <p class="text-sm font-medium">Trascina qui il file</p>
+                <p class="text-xs text-slate-400 mt-1">Oppure clicca per selezionarlo</p>
                 <input type="file" id="file-input" accept=".csv,.xlsx,.xls" class="hidden" />
               </div>
 
               <div id="file-preview" class="hidden bg-slate-700/50 rounded-xl p-3">
                 <p class="text-sm font-medium mb-2">
-                  Archivo: <span id="file-name" class="text-indigo-400"></span>
+                  File: <span id="file-name" class="text-indigo-400"></span>
                 </p>
 
                 <div class="space-y-2">
+                  <select id="company-column" class="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-sm">
+                    <option value="">Colonna Azienda (opzionale)</option>
+                  </select>
                   <select id="address-column" class="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-sm">
-                    <option value="">Columna Dirección</option>
+                    <option value="">Colonna Indirizzo</option>
                   </select>
                   <select id="zone-column" class="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-sm">
-                    <option value="">Columna Zona (opcional)</option>
+                    <option value="">Colonna Zona (opzionale)</option>
                   </select>
                   <select id="postal-column" class="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-sm">
-                    <option value="">Columna Código Postal (opcional)</option>
+                    <option value="">Colonna CAP (opzionale)</option>
                   </select>
                 </div>
 
                 <div class="flex gap-2 mt-3">
                   <button type="button" id="import-btn"
                     class="flex-1 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white font-semibold rounded-lg transition-all text-sm">
-                    Importar
+                    Importa
                   </button>
                   <button type="button" id="cancel-import-btn"
                     class="flex-1 py-2.5 bg-slate-600 hover:bg-slate-500 text-white font-semibold rounded-lg transition-all text-sm">
-                    Cancelar
+                    Annulla
                   </button>
                 </div>
               </div>
             </div>
           </div>
 
-          <!-- Route Planner -->
+          <div class="p-4 border-b border-slate-700">
+            <div class="flex items-center justify-between mb-3">
+              <h2 class="text-sm font-semibold text-slate-400 uppercase tracking-wider">Filtri</h2>
+              <span id="filter-count" class="text-xs px-2 py-1 bg-slate-700/70 text-slate-200 rounded-full">Mostro 0/0</span>
+            </div>
+
+            <input id="search-input" type="text" placeholder="Cerca (azienda, indirizzo, CAP, zona)…"
+              class="w-full px-4 py-2.5 bg-slate-700/50 border border-slate-600 rounded-xl focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all" />
+
+            <div class="space-y-3 mt-3">
+              <select id="company-filter" class="w-full px-4 py-2.5 bg-slate-700/50 border border-slate-600 rounded-xl">
+                <option value="">Tutte le aziende</option>
+              </select>
+
+              <select id="zone-filter" class="w-full px-4 py-2.5 bg-slate-700/50 border border-slate-600 rounded-xl">
+                <option value="">Tutte le zone</option>
+              </select>
+
+              <select id="postal-filter" class="w-full px-4 py-2.5 bg-slate-700/50 border border-slate-600 rounded-xl">
+                <option value="">Tutti i CAP</option>
+              </select>
+
+              <button id="reset-filters" class="w-full py-2.5 bg-slate-700 hover:bg-slate-600 rounded-xl font-semibold transition-all text-sm">
+                Azzera filtri
+              </button>
+            </div>
+          </div>
+
           <div class="p-4 border-b border-slate-700">
             <div class="flex items-center justify-between mb-2">
               <h2 class="text-sm font-semibold text-slate-400 uppercase tracking-wider">Percorso</h2>
               <span id="selected-count" class="text-xs px-2 py-1 bg-indigo-500/20 text-indigo-400 rounded-full">0/10</span>
             </div>
 
-            <p class="text-xs text-slate-500 mb-3">
-              Elegí inicio/fin, seleccioná puntos y luego optimizá o calculá.
+            <p class="text-xs text-slate-400 mb-3">
+              Suggerimento: filtra, seleziona dalla lista e poi calcola.
             </p>
 
             <div class="grid grid-cols-2 gap-2 mb-3">
               <div>
-                <label class="text-xs text-slate-400">Inicio</label>
+                <label class="text-xs text-slate-400">Partenza</label>
                 <select id="start-select" class="w-full mt-1 px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-sm">
-                  <option value="">Seleccionar...</option>
-                  <option value="__GEO__">📍 Mi ubicación</option>
-                  <option value="__NEW__">Nueva dirección...</option>
+                  <option value="">Seleziona...</option>
+                  <option value="__GEO__">📍 La mia posizione</option>
+                  <option value="__NEW__">Nuovo indirizzo...</option>
                 </select>
                 <input id="start-new" type="text"
                   class="hidden w-full mt-2 px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-sm"
-                  placeholder="Inicio (ej: Via Rizzoli 1)" />
+                  placeholder="Partenza (es: Via Rizzoli 1)" />
               </div>
 
               <div>
-                <label class="text-xs text-slate-400">Fin</label>
+                <label class="text-xs text-slate-400">Arrivo</label>
                 <select id="end-select" class="w-full mt-1 px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-sm">
-                  <option value="">Seleccionar...</option>
-                  <option value="__GEO__">📍 Mi ubicación</option>
-                  <option value="__NEW__">Nueva dirección...</option>
+                  <option value="">Seleziona...</option>
+                  <option value="__GEO__">📍 La mia posizione</option>
+                  <option value="__NEW__">Nuovo indirizzo...</option>
                 </select>
                 <input id="end-new" type="text"
                   class="hidden w-full mt-2 px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-sm"
-                  placeholder="Fin" />
+                  placeholder="Arrivo" />
               </div>
             </div>
 
-            <div class="grid grid-cols-2 gap-2">
+            <div class="grid grid-cols-3 gap-2">
               <button id="optimize-route-btn"
                 class="py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white font-semibold rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 disabled>
-                Optimizar
+                Ottimizza
               </button>
               <button id="calc-route-btn"
                 class="py-2.5 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 disabled>
-                Calcular
+                Calcola
               </button>
-            </div>
-
-            <div class="flex gap-2 mt-2">
-              <button id="clear-route-btn" class="flex-1 py-2.5 bg-slate-700 hover:bg-slate-600 rounded-xl font-semibold transition-all text-sm">
-                Limpiar selección/ruta
+              <button id="clear-route-btn"
+                class="py-2.5 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-xl transition-all">
+                Pulisci
               </button>
-            </div>
-
-            <!-- ✅ INFO modo navegación -->
-            <div class="mt-3 text-xs text-slate-400">
-              <span class="font-semibold text-slate-200">Modo navegación:</span> aparece abajo cuando calculás una ruta.
             </div>
           </div>
 
-          <!-- Address List -->
           <div class="p-4">
-            <h2 class="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-3">Direcciones</h2>
+            <h2 class="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-3">Indirizzi</h2>
             <div id="address-list" class="space-y-2"></div>
           </div>
         </div>
       </aside>
 
-      <!-- Map -->
       <div class="flex-1 relative">
         <div id="map"></div>
 
-        <!-- Floating button to open route panel -->
         <button id="route-fab"
           class="hidden absolute bottom-4 right-4 px-4 py-2 rounded-xl bg-indigo-500 hover:bg-indigo-600 font-semibold shadow-xl">
-          Ruta
+          Percorso
         </button>
 
-        <!-- Route info -->
         <div id="route-info"
           class="absolute top-4 right-4 bg-slate-800/90 backdrop-blur-lg rounded-2xl p-4 shadow-xl border border-slate-700 hidden w-[340px] nice-scroll">
           <div class="flex items-center justify-between gap-2 mb-2">
-            <h3 class="font-bold text-lg">Ruta</h3>
-
+            <h3 class="font-bold text-lg">Percorso</h3>
             <div class="flex items-center gap-2">
               <button id="open-gmaps-btn" class="text-xs px-2 py-1 rounded-lg bg-slate-700 hover:bg-slate-600">
                 Google Maps
               </button>
-              <button id="close-route-panel" class="text-xs px-2 py-1 rounded-lg bg-slate-700 hover:bg-slate-600" title="Cerrar">
+              <button id="close-route-panel" class="text-xs px-2 py-1 rounded-lg bg-slate-700 hover:bg-slate-600" title="Chiudi">
                 ✕
               </button>
             </div>
           </div>
-
           <div id="route-details" class="text-sm text-slate-300 space-y-1"></div>
         </div>
 
-        <!-- ✅ NAVIGATION PANEL -->
         <div id="nav-panel">
           <div class="flex items-center justify-between">
-            <div class="text-sm font-semibold">Navegación</div>
+            <div class="text-sm font-semibold">Navigazione</div>
             <div class="flex items-center gap-2">
               <select id="nav-speed" class="text-xs bg-slate-800 border border-slate-700 rounded-lg px-2 py-1">
                 <option value="1">x1</option>
@@ -361,8 +378,7 @@
           </div>
 
           <div class="mt-2">
-            <input id="nav-progress" type="range" min="0" max="100" value="0"
-              class="w-full accent-indigo-500">
+            <input id="nav-progress" type="range" min="0" max="100" value="0" class="w-full accent-indigo-500">
             <div class="flex items-center justify-between text-[11px] text-slate-300 mt-1">
               <span id="nav-status">0%</span>
               <span id="nav-eta">—</span>
@@ -370,13 +386,12 @@
           </div>
         </div>
 
-        <!-- Loading -->
         <div id="loading" class="absolute inset-0 bg-slate-900/75 backdrop-blur flex items-center justify-center hidden">
           <div class="bg-slate-800/80 border border-slate-700 rounded-2xl p-6 w-[min(420px,calc(100vw-32px))] shadow-2xl">
             <div class="flex items-center gap-3">
               <div class="w-12 h-12 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
               <div class="min-w-0">
-                <p id="loading-text" class="text-slate-100 font-semibold text-base">Procesando…</p>
+                <p id="loading-text" class="text-slate-100 font-semibold text-base">Elaborazione…</p>
                 <p id="loading-sub" class="text-xs text-slate-400 mt-1 truncate">—</p>
               </div>
             </div>
@@ -386,58 +401,62 @@
       </div>
     </main>
 
-    <!-- Toast -->
     <div id="toast-container" class="fixed bottom-4 right-4 space-y-2"></div>
   </div>
 
   <script>
-    // ========= CONFIG =========
     const config = {
       maxAddresses: 999,
       maxRoutePoints: 10,
       importGeocodeDelayMs: 850,
-      defaultCenter: [44.4949, 11.3426], // Bologna
+      defaultCenter: [44.4949, 11.3426],
       defaultZoom: 13,
-      storageKey: "route_planner_beta_state_v5",
-      geocodeCacheKey: "route_planner_beta_geocode_cache_v5"
+      storageKey: "route_planner_beta_state_it_v9",
+      geocodeCacheKey: "route_planner_beta_geocode_cache_it_v9"
     };
 
-    // ========= STATE =========
     let addresses = [];
     let selectedIds = [];
     let markers = {};
     let map = null;
 
     let routeLayer = null;
-    let routeNumberMarkers = [];
+    let routeBadges = {};
+    let routeStartMarker = null;
+    let routeEndMarker = null;
+
     let importedData = null;
 
     let startPoint = null;
     let endPoint = null;
 
-    let lastRoutePoints = null;     // [{lat,lng,address}...]
-    let lastRouteGeo = null;        // geojson geometry (LineString)
-    let lastRouteDurationSec = 0;   // from OSRM
+    let lastRoutePoints = null;
+    let lastRouteGeo = null;
+    let lastRouteDurationSec = 0;
 
-    // Nav state
+    let routeActive = false; // ✅ quando true, sul mapa mostriamo SOLO i punti del percorso
+
+    // Navigation sim
     let navMarker = null;
     let navTimer = null;
     let navPlaying = false;
-    let navT = 0; // 0..1
+    let navT = 0;
 
     let geocodeCache = {};
     const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
-    // ========= Helpers =========
-    function setLoading(isLoading, text="Procesando...", sub="") {
+    function setLoading(isLoading, text="Elaborazione…", sub="") {
       document.getElementById("loading-text").textContent = text;
       document.getElementById("loading-sub").textContent = sub || "—";
       document.getElementById("loading").classList.toggle("hidden", !isLoading);
     }
+
     function escapeHtml(str) {
-      return String(str).replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;")
+      return String(str ?? "")
+        .replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;")
         .replaceAll('"',"&quot;").replaceAll("'","&#039;");
     }
+
     function showToast(message, type="info") {
       const container = document.getElementById("toast-container");
       const toast = document.createElement("div");
@@ -448,15 +467,9 @@
       setTimeout(() => toast.remove(), 3200);
     }
 
-    function loadGeocodeCache() {
-      try { geocodeCache = JSON.parse(localStorage.getItem(config.geocodeCacheKey) || "{}"); } catch {}
-    }
-    function saveGeocodeCache() {
-      try { localStorage.setItem(config.geocodeCacheKey, JSON.stringify(geocodeCache)); } catch {}
-    }
-    function saveState() {
-      try { localStorage.setItem(config.storageKey, JSON.stringify({ addresses })); } catch {}
-    }
+    function loadGeocodeCache() { try { geocodeCache = JSON.parse(localStorage.getItem(config.geocodeCacheKey) || "{}"); } catch {} }
+    function saveGeocodeCache() { try { localStorage.setItem(config.geocodeCacheKey, JSON.stringify(geocodeCache)); } catch {} }
+    function saveState() { try { localStorage.setItem(config.storageKey, JSON.stringify({ addresses })); } catch {} }
     function loadState() {
       try {
         const raw = localStorage.getItem(config.storageKey);
@@ -492,7 +505,6 @@
       return null;
     }
 
-    // ========= Map =========
     function initMap() {
       map = L.map("map", { center: config.defaultCenter, zoom: config.defaultZoom, zoomControl: true });
       L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
@@ -502,42 +514,208 @@
       }).addTo(map);
     }
 
-    function createMarker(addr, isSelected=false) {
-      const icon = L.divIcon({
+    // MARKERS
+    function markerIconBase(isSelected=false) {
+      return L.divIcon({
         className: `custom-marker ${isSelected ? "selected-marker" : ""}`,
         iconSize: [24, 24],
         iconAnchor: [12, 12]
       });
+    }
 
-      const marker = L.marker([addr.lat, addr.lng], { icon })
-        .addTo(map)
-        .bindPopup(`<div class="p-2"><strong>${escapeHtml(addr.address)}</strong></div>`);
+    function markerIconWithBadge(badgeText, isSelected=false, badgeType=null) {
+      const badgeClass =
+        badgeType === "start" ? "badge start" :
+        badgeType === "end" ? "badge end" :
+        "badge";
+      const wrapClass = `route-badge-wrap ${isSelected ? "selected" : ""}`;
+      return L.divIcon({
+        className: "",
+        iconSize: [28, 28],
+        iconAnchor: [14, 14],
+        html: `
+          <div class="${wrapClass}">
+            <div class="dot"></div>
+            <div class="${badgeClass}">${escapeHtml(badgeText)}</div>
+          </div>
+        `
+      });
+    }
 
+    function bindCompanyTooltip(marker, addrLike) {
+      const tooltipHtml = `
+        <div style="min-width:180px">
+          <div style="font-weight:800; font-size:13px; margin-bottom:4px;">
+            ${escapeHtml(addrLike.company || "Senza azienda")}
+          </div>
+          <div style="font-size:12px; opacity:0.9;">
+            ${escapeHtml(addrLike.address || "")}
+          </div>
+        </div>
+      `;
+      marker.bindTooltip(tooltipHtml, {
+        direction: "top",
+        offset: [0, -10],
+        opacity: 0.95,
+        sticky: true
+      });
+      marker.on("mouseover", () => marker.openTooltip());
+      marker.on("mouseout", () => marker.closeTooltip());
+    }
+
+    function createMarker(addr) {
+      const isSelected = selectedIds.includes(addr.id);
+      const marker = L.marker([addr.lat, addr.lng], { icon: markerIconBase(isSelected) }).addTo(map);
+      bindCompanyTooltip(marker, { company: addr.company, address: addr.address });
       marker.on("click", () => toggleAddressSelection(addr.id));
       return marker;
+    }
+
+    function rebuildMarkerIconForState(id) {
+      const m = markers[id];
+      if (!m) return;
+      const isSelected = selectedIds.includes(id);
+
+      if (routeBadges[id]?.badgeText != null) {
+        const { badgeText, badgeType } = routeBadges[id];
+        m.setIcon(markerIconWithBadge(badgeText, isSelected, badgeType));
+      } else {
+        m.setIcon(markerIconBase(isSelected));
+      }
+    }
+
+    function getFilters() {
+      return {
+        company: document.getElementById("company-filter").value,
+        zone: document.getElementById("zone-filter").value,
+        postal: document.getElementById("postal-filter").value,
+        q: (document.getElementById("search-input").value || "").trim().toLowerCase()
+      };
+    }
+
+    function getFilteredAddresses() {
+      const { company, zone, postal, q } = getFilters();
+      let filtered = [...addresses];
+      if (company) filtered = filtered.filter(a => (a.company || "") === company);
+      if (zone) filtered = filtered.filter(a => (a.zone || "") === zone);
+      if (postal) filtered = filtered.filter(a => (a.postal_code || "") === postal);
+      if (q) {
+        filtered = filtered.filter(a => {
+          const blob = `${a.company||""} ${a.address||""} ${a.zone||""} ${a.postal_code||""}`.toLowerCase();
+          return blob.includes(q);
+        });
+      }
+      return filtered;
+    }
+
+    // ✅ se esiste un percorso: mostra SOLO punti del percorso
+    function shouldShowMarker(addr) {
+      if (!routeActive) return true;
+      // mostra solo se l'indirizzo è nel set del percorso (start/end inclusi se sono addresses)
+      if (routeBadges[addr.id]) return true;
+      // in alternativa: se è selezionato (quando routeActive ma ancora non disegnato)
+      return false;
     }
 
     function updateMarkers() {
       Object.values(markers).forEach(m => map.removeLayer(m));
       markers = {};
-      addresses.forEach(addr => {
-        if (addr.lat && addr.lng) markers[addr.id] = createMarker(addr, selectedIds.includes(addr.id));
+
+      // in modalità percorso attivo: non filtri la mappa per filtri UX,
+      // mostri solo route points (meno confusione)
+      const source = routeActive ? addresses : getFilteredAddresses();
+
+      source.forEach(addr => {
+        if (!addr.lat || !addr.lng) return;
+        if (!shouldShowMarker(addr)) return;
+        markers[addr.id] = createMarker(addr);
+      });
+
+      // se c'è un percorso, riapplica i badge e i marker start/end
+      if (lastRoutePoints?.length) applyRouteBadges(lastRoutePoints);
+
+      const visible = Object.values(markers);
+      if (visible.length) {
+        const bounds = visible.map(m => m.getLatLng()).map(ll => [ll.lat, ll.lng]);
+        if (bounds.length) map.fitBounds(bounds, { padding: [50, 50] });
+      }
+    }
+
+    function updateFilterOptions() {
+      const companies = [...new Set(addresses.map(a => a.company).filter(Boolean))].sort();
+      const zones = [...new Set(addresses.map(a => a.zone).filter(Boolean))].sort();
+      const postals = [...new Set(addresses.map(a => a.postal_code).filter(Boolean))].sort();
+
+      const companySel = document.getElementById("company-filter");
+      const zoneSel = document.getElementById("zone-filter");
+      const postalSel = document.getElementById("postal-filter");
+
+      const prevC = companySel.value;
+      const prevZ = zoneSel.value;
+      const prevP = postalSel.value;
+
+      companySel.innerHTML = `<option value="">Tutte le aziende</option>` +
+        companies.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join("");
+      zoneSel.innerHTML = `<option value="">Tutte le zone</option>` +
+        zones.map(z => `<option value="${escapeHtml(z)}">${escapeHtml(z)}</option>`).join("");
+      postalSel.innerHTML = `<option value="">Tutti i CAP</option>` +
+        postals.map(p => `<option value="${escapeHtml(p)}">${escapeHtml(p)}</option>`).join("");
+
+      if (companies.includes(prevC)) companySel.value = prevC;
+      if (zones.includes(prevZ)) zoneSel.value = prevZ;
+      if (postals.includes(prevP)) postalSel.value = prevP;
+
+      const filteredCount = getFilteredAddresses().length;
+      document.getElementById("filter-count").textContent = `Mostro ${filteredCount}/${addresses.length}`;
+    }
+
+    function renderAddressList() {
+      const container = document.getElementById("address-list");
+      const filtered = getFilteredAddresses();
+
+      if (!filtered.length) {
+        container.innerHTML = `<div class="text-center py-6 text-slate-500">
+          ${addresses.length ? "Nessun risultato con questi filtri" : "Nessun indirizzo caricato"}
+        </div>`;
+        return;
+      }
+
+      container.innerHTML = filtered.map(a => {
+        const sel = selectedIds.includes(a.id);
+        return `
+          <div class="address-card bg-slate-700/40 rounded-xl p-3 cursor-pointer border-2 ${sel ? "border-indigo-500" : "border-transparent"}"
+               data-id="${a.id}">
+            <div class="flex items-start gap-3">
+              <div class="w-8 h-8 rounded-lg ${sel ? "bg-indigo-500" : "bg-slate-600"} flex items-center justify-center flex-shrink-0">
+                ${sel ? "✓" : "📍"}
+              </div>
+              <div class="flex-1 min-w-0">
+                <p class="font-semibold text-sm truncate">${escapeHtml(a.company || "Senza azienda")}</p>
+                <p class="text-xs text-slate-200/90 truncate">${escapeHtml(a.address)}</p>
+                <p class="text-xs text-slate-400 mt-1">${escapeHtml(a.zone || "—")} • ${escapeHtml(a.postal_code || "—")}</p>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join("");
+
+      container.querySelectorAll("[data-id]").forEach(el => {
+        el.addEventListener("click", () => toggleAddressSelection(el.getAttribute("data-id")));
       });
     }
 
-    // ========= Selection =========
     function toggleAddressSelection(id) {
       const idx = selectedIds.indexOf(id);
       if (idx > -1) selectedIds.splice(idx, 1);
       else {
-        if (selectedIds.length >= config.maxRoutePoints) return showToast(`Máximo ${config.maxRoutePoints} puntos`, "warning");
+        if (selectedIds.length >= config.maxRoutePoints) return showToast(`Massimo ${config.maxRoutePoints} punti`, "warning");
         selectedIds.push(id);
       }
+      rebuildMarkerIconForState(id);
       updateUI();
-      updateMarkers();
     }
 
-    // ========= Start/End =========
+    // START/END
     function updateStartEndSelectors() {
       const startSel = document.getElementById("start-select");
       const endSel = document.getElementById("end-select");
@@ -545,16 +723,9 @@
       const prevStart = startSel.value;
       const prevEnd = endSel.value;
 
-      startSel.innerHTML = `
-        <option value="">Seleccionar...</option>
-        <option value="__GEO__">📍 Mi ubicación</option>
-        <option value="__NEW__">Nueva dirección...</option>
-      `;
-      endSel.innerHTML = `
-        <option value="">Seleccionar...</option>
-        <option value="__GEO__">📍 Mi ubicación</option>
-        <option value="__NEW__">Nueva dirección...</option>
-      `;
+      startSel.innerHTML = `<option value="">Seleziona...</option><option value="__GEO__">📍 La mia posizione</option><option value="__NEW__">Nuovo indirizzo...</option>`;
+      endSel.innerHTML = `<option value="">Seleziona...</option><option value="__GEO__">📍 La mia posizione</option><option value="__NEW__">Nuovo indirizzo...</option>`;
+
       addresses.forEach(a => {
         startSel.appendChild(new Option(a.address, a.id));
         endSel.appendChild(new Option(a.address, a.id));
@@ -568,15 +739,15 @@
 
       const hasSome = selectedIds.length >= 1;
       const hasSE = !!startSel.value && !!endSel.value;
-      document.getElementById("optimize-route-btn").disabled = !(hasSome && hasSE);
       document.getElementById("calc-route-btn").disabled = !(hasSome && hasSE);
+      document.getElementById("optimize-route-btn").disabled = !(hasSome && hasSE);
     }
 
     async function getBrowserLocationPoint() {
       return new Promise((resolve) => {
         if (!navigator.geolocation) return resolve(null);
         navigator.geolocation.getCurrentPosition(
-          (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude, address: "Mi ubicación" }),
+          (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude, address: "La mia posizione", company: "La mia posizione", __type: "geo" }),
           () => resolve(null),
           { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 }
         );
@@ -586,7 +757,7 @@
     function pointFromExisting(id) {
       const a = addresses.find(x => x.id === id);
       if (!a || !a.lat || !a.lng) return null;
-      return { lat: a.lat, lng: a.lng, address: a.address };
+      return { lat: a.lat, lng: a.lng, address: a.address, company: a.company || "", __type: "addr", id: a.id };
     }
 
     async function resolveStartEnd() {
@@ -595,47 +766,45 @@
       const startNew = document.getElementById("start-new").value.trim();
       const endNew = document.getElementById("end-new").value.trim();
 
-      if (!startSelVal) throw new Error("Elegí un punto de partida");
-      if (!endSelVal) throw new Error("Elegí un punto de finalización");
+      if (!startSelVal) throw new Error("Seleziona un punto di partenza");
+      if (!endSelVal) throw new Error("Seleziona un punto di arrivo");
 
       if (startSelVal === "__GEO__") {
-        setLoading(true, "Obteniendo ubicación…", "Inicio");
+        setLoading(true, "Recupero posizione…", "Partenza");
         const p = await getBrowserLocationPoint();
-        if (!p) throw new Error("No pude obtener tu ubicación (permiso?)");
-        startPoint = p;
+        if (!p) throw new Error("Impossibile ottenere la posizione (permessi?)");
+        startPoint = { ...p, company: "Partenza", address: "La mia posizione" };
       } else if (startSelVal === "__NEW__") {
-        if (!startNew) throw new Error("Ingresá dirección de partida");
-        setLoading(true, "Geocodificando…", "Inicio");
+        if (!startNew) throw new Error("Inserisci l'indirizzo di partenza");
+        setLoading(true, "Geocodifica…", "Partenza");
         const c = await geocodeAddress(normalizeAddressForGeocode(startNew));
-        if (!c) throw new Error("No pude geocodificar el inicio");
-        startPoint = { ...c, address: startNew };
+        if (!c) throw new Error("Impossibile geocodificare la partenza");
+        startPoint = { ...c, address: startNew, company: "Partenza", __type: "new" };
       } else {
         const p = pointFromExisting(startSelVal);
-        if (!p) throw new Error("Inicio inválido");
+        if (!p) throw new Error("Partenza non valida");
         startPoint = p;
       }
 
       if (endSelVal === "__GEO__") {
-        setLoading(true, "Obteniendo ubicación…", "Fin");
+        setLoading(true, "Recupero posizione…", "Arrivo");
         const p = await getBrowserLocationPoint();
-        if (!p) throw new Error("No pude obtener tu ubicación (permiso?)");
-        endPoint = p;
+        if (!p) throw new Error("Impossibile ottenere la posizione (permessi?)");
+        endPoint = { ...p, company: "Arrivo", address: "La mia posizione" };
       } else if (endSelVal === "__NEW__") {
-        if (!endNew) throw new Error("Ingresá dirección de fin");
-        setLoading(true, "Geocodificando…", "Fin");
+        if (!endNew) throw new Error("Inserisci l'indirizzo di arrivo");
+        setLoading(true, "Geocodifica…", "Arrivo");
         const c = await geocodeAddress(normalizeAddressForGeocode(endNew));
-        if (!c) throw new Error("No pude geocodificar el fin");
-        endPoint = { ...c, address: endNew };
+        if (!c) throw new Error("Impossibile geocodificare l'arrivo");
+        endPoint = { ...c, address: endNew, company: "Arrivo", __type: "new" };
       } else {
         const p = pointFromExisting(endSelVal);
-        if (!p) throw new Error("Fin inválido");
+        if (!p) throw new Error("Arrivo non valido");
         endPoint = p;
       }
-
-      return { startPoint, endPoint };
     }
 
-    // ========= OSRM =========
+    // ROUTING
     function toLonLat(points) { return points.map(p => `${p.lng},${p.lat}`).join(";"); }
     function sanitizePoints(points) {
       const cleaned = [];
@@ -652,15 +821,24 @@
 
     async function osrmRouteDriving(points) {
       const pts = sanitizePoints(points);
-      if (pts.length < 2) throw new Error("Necesitás al menos 2 puntos distintos.");
+      if (pts.length < 2) throw new Error("Servono almeno 2 punti distinti.");
       const coords = toLonLat(pts);
       const url = `https://router.project-osrm.org/route/v1/driving/${coords}?overview=full&geometries=geojson&steps=true`;
       const res = await fetch(url);
-      if (!res.ok) throw new Error(`OSRM route error (${res.status})`);
+      if (!res.ok) throw new Error(`Errore OSRM route (${res.status})`);
       return await res.json();
     }
 
-    // ========= Route draw + UI =========
+    async function osrmTripOptimized(points) {
+      const pts = sanitizePoints(points);
+      if (pts.length < 2) throw new Error("Servono almeno 2 punti distinti.");
+      const coords = toLonLat(pts);
+      const url = `https://router.project-osrm.org/trip/v1/driving/${coords}?roundtrip=false&source=first&destination=last&overview=full&geometries=geojson&steps=true`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`Errore OSRM trip (${res.status})`);
+      return await res.json();
+    }
+
     function hideRoutePanel() {
       document.getElementById("route-info").classList.add("hidden");
       document.getElementById("route-fab").classList.remove("hidden");
@@ -670,41 +848,75 @@
       document.getElementById("route-fab").classList.add("hidden");
     }
 
+    function clearRouteBadges() {
+      Object.keys(routeBadges).forEach(id => {
+        const m = markers[id];
+        if (m) {
+          const isSelected = selectedIds.includes(id);
+          m.setIcon(markerIconBase(isSelected));
+        }
+      });
+      routeBadges = {};
+      if (routeStartMarker) { map.removeLayer(routeStartMarker); routeStartMarker = null; }
+      if (routeEndMarker) { map.removeLayer(routeEndMarker); routeEndMarker = null; }
+    }
+
     function clearRouteLayersOnly() {
       if (routeLayer) { map.removeLayer(routeLayer); routeLayer = null; }
-      routeNumberMarkers.forEach(m => map.removeLayer(m));
-      routeNumberMarkers = [];
+      clearRouteBadges();
+
       lastRoutePoints = null;
       lastRouteGeo = null;
       lastRouteDurationSec = 0;
+
       stopNavigation();
       hideRoutePanel();
       document.getElementById("nav-panel").style.display = "none";
+
+      routeActive = false; // ✅ torna a mostrare tutto
+      updateMarkers();
     }
 
-    function drawRouteAndMarkers(orderedPoints, geojsonGeometry) {
-      clearRouteLayersOnly();
+    function applyRouteBadges(orderedPoints) {
+      clearRouteBadges();
 
-      routeLayer = L.geoJSON(geojsonGeometry, { style: { color: "#6366f1", weight: 4, opacity: 0.95 } }).addTo(map);
+      orderedPoints.forEach((p, idx) => {
+        const number = String(idx + 1);
 
-      routeNumberMarkers = orderedPoints.map((p, idx) => {
-        return L.marker([p.lat, p.lng], {
-          icon: L.divIcon({
-            className: "route-number-marker",
-            html: `<div style="background: linear-gradient(135deg, #6366f1, #8b5cf6); color: white; width: 28px; height: 28px; border-radius: 50%; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:12px; border:2px solid rgba(255,255,255,0.95); box-shadow:0 2px 8px rgba(0,0,0,0.3);">${idx+1}</div>`,
-            iconSize: [28, 28],
-            iconAnchor: [14, 14]
-          })
-        }).addTo(map);
+        if (p.__type === "addr" && p.id && markers[p.id]) {
+          const m = markers[p.id];
+          const isSelected = selectedIds.includes(p.id);
+
+          routeBadges[p.id] = { badgeText: number, badgeType: null };
+          m.setIcon(markerIconWithBadge(number, isSelected, null));
+        } else {
+          const isFirst = idx === 0;
+          const isLast = idx === orderedPoints.length - 1;
+
+          const badgeText = isFirst ? "P" : isLast ? "A" : number;
+          const badgeType = isFirst ? "start" : isLast ? "end" : null;
+
+          const temp = L.marker([p.lat, p.lng], {
+            icon: markerIconWithBadge(badgeText, false, badgeType)
+          }).addTo(map);
+
+          bindCompanyTooltip(temp, { company: p.company || (isFirst ? "Partenza" : isLast ? "Arrivo" : "Punto"), address: p.address });
+
+          if (isFirst) routeStartMarker = temp;
+          else if (isLast) routeEndMarker = temp;
+        }
       });
+    }
 
-      map.fitBounds(orderedPoints.map(p => [p.lat, p.lng]), { padding: [50, 50] });
+    function drawRouteGeometry(geojsonGeometry) {
+      if (routeLayer) { map.removeLayer(routeLayer); routeLayer = null; }
+      routeLayer = L.geoJSON(geojsonGeometry, { style: { color: "#6366f1", weight: 4, opacity: 0.95 } }).addTo(map);
     }
 
     function showRouteInfo(orderedPoints, distKm, durMin, geoGeom, durSec) {
       lastRoutePoints = orderedPoints;
       lastRouteGeo = geoGeom;
-      lastRouteDurationSec = durSec || (durMin*60);
+      lastRouteDurationSec = durSec || (durMin * 60);
 
       const details = document.getElementById("route-details");
       details.innerHTML = `
@@ -712,13 +924,11 @@
           ${orderedPoints.map(p => `<li class="truncate">${escapeHtml(p.address)}</li>`).join("")}
         </ol>
         <div class="mt-3 pt-3 border-t border-slate-600">
-          <p class="font-semibold text-emerald-400">Distancia total: ${distKm.toFixed(2)} km</p>
-          <p class="text-xs text-slate-400 mt-1">Duración total: ${Math.round(durMin)} min</p>
+          <p class="font-semibold text-emerald-400">Distanza totale: ${distKm.toFixed(2)} km</p>
+          <p class="text-xs text-slate-400 mt-1">Durata totale: ${Math.round(durMin)} min</p>
         </div>
       `;
       showRoutePanel();
-
-      // ✅ mostrar navegación
       document.getElementById("nav-panel").style.display = "block";
       resetNavigation();
     }
@@ -728,37 +938,111 @@
         .map(id => addresses.find(a => a.id === id))
         .filter(Boolean)
         .filter(a => a.lat && a.lng)
-        .map(a => ({ lat: a.lat, lng: a.lng, address: a.address }));
+        .map(a => ({
+          lat: a.lat, lng: a.lng,
+          address: a.address,
+          company: a.company || "",
+          __type: "addr",
+          id: a.id
+        }));
 
-      // sacar duplicados con start/end
       const filteredMid = mid.filter(p => !sameCoord(p, startPoint) && !sameCoord(p, endPoint));
       return sanitizePoints([startPoint, ...filteredMid, endPoint]);
     }
 
     async function calculateRoute() {
       try {
-        setLoading(true, "Calculando ruta…", "OSRM");
+        setLoading(true, "Calcolo percorso…", "OSRM");
         await resolveStartEnd();
-
         const points = buildPointsForRoute();
-        if (points.length < 2) throw new Error("Ruta inválida");
 
         const routeRes = await osrmRouteDriving(points);
         const route = routeRes.routes?.[0];
-        if (!route) throw new Error("No se encontró ruta");
+        if (!route) throw new Error("Percorso non trovato");
 
-        drawRouteAndMarkers(points, route.geometry);
+        // ✅ attiva modalità "solo percorso"
+        routeActive = true;
+
+        // rimuovi tutto e ridisegna solo i punti del percorso
+        Object.values(markers).forEach(m => map.removeLayer(m));
+        markers = {};
+
+        // crea marker SOLO per indirizzi del percorso (quelli con id) + start/end temporanei se servono
+        points.forEach(p => {
+          if (p.__type === "addr" && p.id) {
+            const a = addresses.find(x => x.id === p.id);
+            if (a && a.lat && a.lng) markers[a.id] = createMarker(a);
+          }
+        });
+
+        // ora disegna route e badge
+        if (routeLayer) { map.removeLayer(routeLayer); routeLayer = null; }
+        clearRouteBadges();
+        drawRouteGeometry(route.geometry);
+        applyRouteBadges(points);
         showRouteInfo(points, route.distance/1000, route.duration/60, route.geometry, route.duration);
 
         setLoading(false);
-        showToast("Ruta calculada ✅", "success");
+        showToast("Percorso calcolato ✅", "success");
+        map.fitBounds(points.map(p => [p.lat, p.lng]), { padding: [50,50] });
+
       } catch (e) {
         setLoading(false);
-        showToast(e.message || "Error", "error");
+        showToast(e.message || "Errore", "error");
       }
     }
 
-    // ========= NAVIGATION (simulada sobre geometría) =========
+    async function optimizeRoute() {
+      try {
+        setLoading(true, "Ottimizzazione…", "OSRM Trip");
+        await resolveStartEnd();
+        const points = buildPointsForRoute();
+
+        const tripRes = await osrmTripOptimized(points);
+        const trip = tripRes.trips?.[0];
+        const waypoints = tripRes.waypoints;
+
+        if (!trip || !waypoints || waypoints.length !== points.length) {
+          throw new Error("Ottimizzazione non disponibile → uso Calcola");
+        }
+
+        const ordered = new Array(points.length);
+        waypoints.forEach((wp, inputIndex) => {
+          const seqIndex = wp.waypoint_index;
+          ordered[seqIndex] = points[inputIndex];
+        });
+        if (ordered.some(x => !x)) throw new Error("Ottimizzazione incompleta → uso Calcola");
+
+        routeActive = true;
+
+        Object.values(markers).forEach(m => map.removeLayer(m));
+        markers = {};
+
+        ordered.forEach(p => {
+          if (p.__type === "addr" && p.id) {
+            const a = addresses.find(x => x.id === p.id);
+            if (a && a.lat && a.lng) markers[a.id] = createMarker(a);
+          }
+        });
+
+        if (routeLayer) { map.removeLayer(routeLayer); routeLayer = null; }
+        clearRouteBadges();
+        drawRouteGeometry(trip.geometry);
+        applyRouteBadges(ordered);
+        showRouteInfo(ordered, trip.distance/1000, trip.duration/60, trip.geometry, trip.duration);
+
+        setLoading(false);
+        showToast("Percorso ottimizzato ✅", "success");
+        map.fitBounds(ordered.map(p => [p.lat, p.lng]), { padding: [50,50] });
+
+      } catch (e) {
+        setLoading(false);
+        showToast((e.message || "Ottimizzazione fallita") + "…", "warning");
+        await calculateRoute();
+      }
+    }
+
+    // NAV SIM
     function resetNavigation() {
       navT = 0;
       updateNavUI();
@@ -766,37 +1050,25 @@
       const p = getPointOnRoute(0);
       if (p) navMarker = L.circleMarker([p.lat, p.lng], { radius: 8, weight: 2, color: "#fff", fillColor: "#22c55e", fillOpacity: 1 }).addTo(map);
     }
-
     function stopNavigation() {
       navPlaying = false;
       if (navTimer) { clearInterval(navTimer); navTimer = null; }
       const btn = document.getElementById("nav-toggle");
       if (btn) btn.textContent = "▶︎ Play";
-      const status = document.getElementById("nav-eta");
-      if (status) status.textContent = "—";
+      document.getElementById("nav-eta").textContent = "—";
     }
-
     function updateNavUI() {
       const progress = document.getElementById("nav-progress");
       const pct = Math.round(navT * 100);
       progress.value = String(pct);
       document.getElementById("nav-status").textContent = `${pct}%`;
-
-      // ETA estimada según duración OSRM
       const remaining = Math.max(0, (1 - navT) * (lastRouteDurationSec || 0));
-      if (lastRouteDurationSec) {
-        const min = Math.round(remaining / 60);
-        document.getElementById("nav-eta").textContent = `ETA ~${min} min`;
-      } else {
-        document.getElementById("nav-eta").textContent = "—";
-      }
+      if (lastRouteDurationSec) document.getElementById("nav-eta").textContent = `ETA ~${Math.round(remaining/60)} min`;
+      else document.getElementById("nav-eta").textContent = "—";
     }
-
     function getPointOnRoute(t01) {
-      // toma la geometría LineString (geojson) y devuelve punto interpolado
       if (!lastRouteGeo?.coordinates?.length) return null;
-      const coords = lastRouteGeo.coordinates; // [lon,lat]
-      // construir longitudes acumuladas
+      const coords = lastRouteGeo.coordinates;
       let total = 0;
       const segLen = [];
       for (let i = 0; i < coords.length - 1; i++) {
@@ -807,7 +1079,6 @@
         total += l;
       }
       if (total === 0) return { lat: coords[0][1], lng: coords[0][0] };
-
       const target = t01 * total;
       let acc = 0;
       for (let i = 0; i < segLen.length; i++) {
@@ -824,33 +1095,23 @@
       const last = coords[coords.length-1];
       return { lat: last[1], lng: last[0] };
     }
-
     function navTick() {
       const speed = parseFloat(document.getElementById("nav-speed").value || "1");
-      // avanzamos en base al tiempo: 60s de sim por recorrido completo a x1 (ajustable)
-      const dt = (0.004 * speed); // ~250 ticks para completar
-      navT = Math.min(1, navT + dt);
-
+      navT = Math.min(1, navT + (0.004 * speed));
       const p = getPointOnRoute(navT);
       if (p && navMarker) {
         navMarker.setLatLng([p.lat, p.lng]);
         map.panTo([p.lat, p.lng], { animate: true, duration: 0.25 });
       }
       updateNavUI();
-
-      if (navT >= 1) {
-        stopNavigation();
-        showToast("Navegación finalizada ✅", "success");
-      }
+      if (navT >= 1) { stopNavigation(); showToast("Navigazione completata ✅", "success"); }
     }
-
     function toggleNavigation() {
-      if (!lastRouteGeo) return showToast("Primero calculá una ruta", "warning");
+      if (!lastRouteGeo) return showToast("Prima calcola un percorso", "warning");
       const btn = document.getElementById("nav-toggle");
-
       if (!navPlaying) {
         navPlaying = true;
-        btn.textContent = "⏸ Pause";
+        btn.textContent = "⏸ Pausa";
         if (!navMarker) resetNavigation();
         navTimer = setInterval(navTick, 250);
       } else {
@@ -860,7 +1121,75 @@
       }
     }
 
-    // ========= Import =========
+    // IMPORT
+    function parseCSV(text) {
+      const raw = text.trim();
+      if (!raw) return [];
+      const lines = raw.split(/\r?\n/);
+      if (lines.length < 2) return [];
+      const delimiter = (lines[0].includes(";") && !lines[0].includes(",")) ? ";" : ",";
+      const headers = lines[0].split(delimiter).map(h => h.trim()).filter(Boolean);
+      const out = [];
+      for (let i = 1; i < lines.length; i++) {
+        const row = {};
+        const values = lines[i].split(delimiter).map(v => v.trim());
+        headers.forEach((h, idx) => row[h] = values[idx] ?? "");
+        out.push(row);
+      }
+      return out;
+    }
+    function parseXLSX(arrayBuffer) {
+      const wb = XLSX.read(arrayBuffer, { type: "array" });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      return XLSX.utils.sheet_to_json(ws, { defval: "" });
+    }
+    function populateColumnSelectors(data) {
+      const headers = Object.keys(data[0] || {});
+      const companySel = document.getElementById("company-column");
+      const addressSel = document.getElementById("address-column");
+      const zoneSel = document.getElementById("zone-column");
+      const postalSel = document.getElementById("postal-column");
+
+      companySel.innerHTML = `<option value="">Colonna Azienda (opzionale)</option>`;
+      addressSel.innerHTML = `<option value="">Colonna Indirizzo</option>`;
+      zoneSel.innerHTML = `<option value="">Colonna Zona (opzionale)</option>`;
+      postalSel.innerHTML = `<option value="">Colonna CAP (opzionale)</option>`;
+
+      headers.forEach(h => {
+        companySel.appendChild(new Option(h, h));
+        addressSel.appendChild(new Option(h, h));
+        zoneSel.appendChild(new Option(h, h));
+        postalSel.appendChild(new Option(h, h));
+
+        const low = h.toLowerCase();
+        if (low.includes("azienda") || low.includes("company") || low.includes("nome") || low.includes("name") || low.includes("empresa")) companySel.value = h;
+        if (low.includes("indirizzo") || low.includes("address") || low.includes("dirección") || low.includes("direccion")) addressSel.value = h;
+        if (low.includes("zona") || low.includes("zone") || low.includes("quartiere")) zoneSel.value = h;
+        if (low.includes("cap") || low.includes("postal") || low.includes("zip") || low.includes("codigo")) postalSel.value = h;
+      });
+    }
+    function handleFileSelect(file) {
+      document.getElementById("file-name").textContent = file.name;
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          let data = [];
+          const name = file.name.toLowerCase();
+          if (name.endsWith(".csv")) data = parseCSV(e.target.result);
+          else if (name.endsWith(".xlsx") || name.endsWith(".xls")) data = parseXLSX(e.target.result);
+          else return showToast("Formato non supportato", "error");
+
+          if (!data.length) return showToast("Nessun dato trovato", "error");
+          importedData = data;
+          populateColumnSelectors(data);
+          document.getElementById("file-preview").classList.remove("hidden");
+        } catch {
+          showToast("Errore lettura file", "error");
+        }
+      };
+      if (file.name.toLowerCase().endsWith(".csv")) reader.readAsText(file);
+      else reader.readAsArrayBuffer(file);
+    }
     function setupImportHandlers() {
       const toggleBtn = document.getElementById("toggle-import-form");
       const importSection = document.getElementById("import-form-section");
@@ -898,75 +1227,13 @@
       });
     }
 
-    function parseCSV(text) {
-      const raw = text.trim();
-      if (!raw) return [];
-      const lines = raw.split(/\r?\n/);
-      if (lines.length < 2) return [];
-      const delimiter = (lines[0].includes(";") && !lines[0].includes(",")) ? ";" : ",";
-      const headers = lines[0].split(delimiter).map(h => h.trim()).filter(Boolean);
-      const out = [];
-      for (let i = 1; i < lines.length; i++) {
-        const row = {};
-        const values = lines[i].split(delimiter).map(v => v.trim());
-        headers.forEach((h, idx) => row[h] = values[idx] ?? "");
-        out.push(row);
-      }
-      return out;
-    }
-    function parseXLSX(arrayBuffer) {
-      const wb = XLSX.read(arrayBuffer, { type: "array" });
-      const ws = wb.Sheets[wb.SheetNames[0]];
-      return XLSX.utils.sheet_to_json(ws, { defval: "" });
-    }
-    function populateColumnSelectors(data) {
-      const headers = Object.keys(data[0] || {});
-      const addressSel = document.getElementById("address-column");
-      const zoneSel = document.getElementById("zone-column");
-      const postalSel = document.getElementById("postal-column");
-      addressSel.innerHTML = `<option value="">Columna Dirección</option>`;
-      zoneSel.innerHTML = `<option value="">Columna Zona (opcional)</option>`;
-      postalSel.innerHTML = `<option value="">Columna Código Postal (opcional)</option>`;
-
-      headers.forEach(h => {
-        addressSel.appendChild(new Option(h, h));
-        zoneSel.appendChild(new Option(h, h));
-        postalSel.appendChild(new Option(h, h));
-        const low = h.toLowerCase();
-        if (low.includes("dirección") || low.includes("direccion") || low.includes("address") || low.includes("indirizzo")) addressSel.value = h;
-        if (low.includes("zona") || low.includes("zone") || low.includes("quartiere")) zoneSel.value = h;
-        if (low.includes("postal") || low.includes("codigo") || low.includes("zip") || low.includes("cap")) postalSel.value = h;
-      });
-    }
-    function handleFileSelect(file) {
-      document.getElementById("file-name").textContent = file.name;
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        try {
-          let data = [];
-          const name = file.name.toLowerCase();
-          if (name.endsWith(".csv")) data = parseCSV(e.target.result);
-          else if (name.endsWith(".xlsx") || name.endsWith(".xls")) data = parseXLSX(e.target.result);
-          else return showToast("Formato no soportado", "error");
-
-          if (!data.length) return showToast("No hay datos", "error");
-          importedData = data;
-          populateColumnSelectors(data);
-          document.getElementById("file-preview").classList.remove("hidden");
-        } catch {
-          showToast("Error leyendo archivo", "error");
-        }
-      };
-      if (file.name.toLowerCase().endsWith(".csv")) reader.readAsText(file);
-      else reader.readAsArrayBuffer(file);
-    }
-
     async function processImport() {
-      if (!importedData?.length) return showToast("No hay datos", "warning");
+      if (!importedData?.length) return showToast("Nessun dato", "warning");
+      const companyCol = document.getElementById("company-column").value;
       const addressCol = document.getElementById("address-column").value;
       const zoneCol = document.getElementById("zone-column").value;
       const postalCol = document.getElementById("postal-column").value;
-      if (!addressCol) return showToast("Elegí columna Dirección", "warning");
+      if (!addressCol) return showToast("Seleziona la colonna Indirizzo", "warning");
 
       const importBtn = document.getElementById("import-btn");
       importBtn.disabled = true;
@@ -977,14 +1244,14 @@
         const addr = (row[addressCol] ?? "").toString().trim();
         if (!addr) continue;
 
-        setLoading(true, `Importando ${i+1}/${importedData.length}…`, addr);
-
+        setLoading(true, `Importazione ${i+1}/${importedData.length}…`, addr);
         const coords = await geocodeAddress(normalizeAddressForGeocode(addr));
         if (!coords) { err++; await sleep(config.importGeocodeDelayMs); continue; }
 
         const id = (crypto.randomUUID ? crypto.randomUUID() : (Date.now().toString() + Math.random().toString(16).slice(2)));
         addresses.push({
           id,
+          company: companyCol ? (row[companyCol] ?? "").toString().trim() : "",
           address: addr,
           zone: zoneCol ? (row[zoneCol] ?? "").toString().trim() : "",
           postal_code: postalCol ? (row[postalCol] ?? "").toString().trim() : "",
@@ -998,89 +1265,79 @@
 
       importBtn.disabled = false;
       setLoading(false);
+
       saveState();
       updateUI();
       updateMarkers();
-      showToast(`Import: ${ok} ok${err ? ` • ${err} errores` : ""}`, ok ? "success" : "error");
+      showToast(`Import: ${ok} ok${err ? ` • ${err} errori` : ""}`, ok ? "success" : "error");
     }
 
-    // ========= UI =========
-    function renderAddressList() {
-      const container = document.getElementById("address-list");
-      if (!addresses.length) {
-        container.innerHTML = `<div class="text-center py-6 text-slate-500">No hay direcciones cargadas</div>`;
-        return;
-      }
-      container.innerHTML = addresses.map(a => {
-        const sel = selectedIds.includes(a.id);
-        return `
-          <div class="address-card bg-slate-700/40 rounded-xl p-3 cursor-pointer border-2 ${sel ? "border-indigo-500" : "border-transparent"}"
-               data-id="${a.id}">
-            <div class="flex items-center gap-3">
-              <div class="w-8 h-8 rounded-lg ${sel ? "bg-indigo-500" : "bg-slate-600"} flex items-center justify-center">
-                ${sel ? "✓" : "📍"}
-              </div>
-              <div class="flex-1 min-w-0">
-                <p class="font-medium text-sm truncate">${escapeHtml(a.address)}</p>
-                <p class="text-xs text-slate-400 mt-1">${escapeHtml(a.zone || "—")} • ${escapeHtml(a.postal_code || "—")}</p>
-              </div>
-            </div>
-          </div>
-        `;
-      }).join("");
-
-      container.querySelectorAll("[data-id]").forEach(el => {
-        el.addEventListener("click", () => toggleAddressSelection(el.getAttribute("data-id")));
-      });
-    }
-
+    // UI
     function updateUI() {
-      document.getElementById("address-count").textContent = `${addresses.length} direccion${addresses.length !== 1 ? "es" : ""}`;
+      document.getElementById("address-count").textContent = `${addresses.length} indirizz${addresses.length !== 1 ? "i" : "o"}`;
       document.getElementById("selected-count").textContent = `${selectedIds.length}/${config.maxRoutePoints}`;
+      updateFilterOptions();
       renderAddressList();
       updateStartEndSelectors();
     }
 
-    // ========= Mobile sidebar =========
+    // Google Maps
+    function isIOS() { return /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream; }
+    function isAndroid() { return /Android/.test(navigator.userAgent); }
+
+    function openGoogleMapsNavigation(points) {
+      if (!points || points.length < 2) { showToast("Prima calcola un percorso", "warning"); return; }
+      const origin = points[0];
+      const dest = points[points.length - 1];
+      const mid = points.slice(1, -1);
+
+      const webOrigin = encodeURIComponent(`${origin.lat},${origin.lng}`);
+      const webDest = encodeURIComponent(`${dest.lat},${dest.lng}`);
+      const webWaypoints = mid.length ? `&waypoints=${mid.map(p => encodeURIComponent(`${p.lat},${p.lng}`)).join("%7C")}` : "";
+      const webUrl = `https://www.google.com/maps/dir/?api=1&origin=${webOrigin}&destination=${webDest}&travelmode=driving${webWaypoints}`;
+
+      if (isAndroid()) {
+        if (mid.length > 0) { window.open(webUrl, "_blank", "noopener,noreferrer"); return; }
+        const navUrl = `google.navigation:q=${dest.lat},${dest.lng}&mode=d`;
+        window.location.href = navUrl;
+        return;
+      }
+      window.open(webUrl, "_blank", "noopener,noreferrer");
+    }
+
+    // Mobile sidebar
     function setupMobileSidebar() {
       const sidebar = document.getElementById("sidebar");
       const backdrop = document.getElementById("sidebar-backdrop");
       const toggleBtn = document.getElementById("toggle-panel");
 
-      function openSidebar() {
-        sidebar.classList.remove("-translate-x-full");
-        backdrop.classList.remove("hidden");
-      }
-      function closeSidebar() {
-        sidebar.classList.add("-translate-x-full");
-        backdrop.classList.add("hidden");
-      }
-      function isSidebarOpen() { return !sidebar.classList.contains("-translate-x-full"); }
+      function openSidebar() { sidebar.classList.remove("-translate-x-full"); backdrop.classList.remove("hidden"); }
+      function closeSidebar() { sidebar.classList.add("-translate-x-full"); backdrop.classList.add("hidden"); }
+      function isOpen() { return !sidebar.classList.contains("-translate-x-full"); }
 
-      toggleBtn.addEventListener("click", (e) => {
-        e.stopPropagation();
-        isSidebarOpen() ? closeSidebar() : openSidebar();
-      });
+      toggleBtn.addEventListener("click", (e) => { e.stopPropagation(); isOpen() ? closeSidebar() : openSidebar(); });
       backdrop.addEventListener("click", closeSidebar);
 
       document.getElementById("map").addEventListener("click", () => {
-        if (window.innerWidth < 1024 && isSidebarOpen()) closeSidebar();
+        if (window.innerWidth < 1024 && isOpen()) closeSidebar();
       });
     }
 
-    // ========= Actions =========
+    // Events
     async function handleFormSubmit(e) {
       e.preventDefault();
+      const company = document.getElementById("company-input").value.trim();
       const address = document.getElementById("address-input").value.trim();
-      if (!address) return showToast("Ingresá una dirección", "warning");
+      if (!address) return showToast("Inserisci un indirizzo", "warning");
 
-      setLoading(true, "Geocodificando…", address);
+      setLoading(true, "Geocodifica…", address);
       const coords = await geocodeAddress(normalizeAddressForGeocode(address));
-      if (!coords) { setLoading(false); return showToast("No pude geocodificar", "error"); }
+      if (!coords) { setLoading(false); return showToast("Impossibile geocodificare", "error"); }
 
       const id = (crypto.randomUUID ? crypto.randomUUID() : (Date.now().toString() + Math.random().toString(16).slice(2)));
       addresses.push({
         id,
+        company,
         address,
         zone: document.getElementById("zone-input").value.trim() || "",
         postal_code: document.getElementById("postal-input").value.trim() || "",
@@ -1088,72 +1345,85 @@
         lng: coords.lng
       });
 
+      document.getElementById("company-input").value = "";
       document.getElementById("address-input").value = "";
       document.getElementById("zone-input").value = "";
       document.getElementById("postal-input").value = "";
 
       saveState();
-      updateUI();
-      updateMarkers();
       setLoading(false);
-      showToast("Dirección agregada ✅", "success");
+      updateUI();
+      if (!routeActive) updateMarkers(); // se percorso attivo, non confondere la mappa
+      showToast("Indirizzo aggiunto ✅", "success");
     }
 
-    // ========= Init =========
+    function setupEvents() {
+      document.getElementById("address-form").addEventListener("submit", handleFormSubmit);
+
+      const rerender = () => { updateUI(); if (!routeActive) updateMarkers(); };
+
+      document.getElementById("company-filter").addEventListener("change", rerender);
+      document.getElementById("zone-filter").addEventListener("change", rerender);
+      document.getElementById("postal-filter").addEventListener("change", rerender);
+      document.getElementById("search-input").addEventListener("input", rerender);
+
+      document.getElementById("reset-filters").addEventListener("click", () => {
+        document.getElementById("company-filter").value = "";
+        document.getElementById("zone-filter").value = "";
+        document.getElementById("postal-filter").value = "";
+        document.getElementById("search-input").value = "";
+        rerender();
+      });
+
+      document.getElementById("start-select").addEventListener("change", updateStartEndSelectors);
+      document.getElementById("end-select").addEventListener("change", updateStartEndSelectors);
+
+      document.getElementById("calc-route-btn").addEventListener("click", calculateRoute);
+      document.getElementById("optimize-route-btn").addEventListener("click", optimizeRoute);
+
+      document.getElementById("clear-route-btn").addEventListener("click", () => {
+        selectedIds = [];
+        updateUI();
+        clearRouteLayersOnly();
+        showToast("Percorso pulito", "info");
+      });
+
+      document.getElementById("close-route-panel").addEventListener("click", hideRoutePanel);
+      document.getElementById("route-fab").addEventListener("click", showRoutePanel);
+      document.getElementById("open-gmaps-btn").addEventListener("click", () => openGoogleMapsNavigation(lastRoutePoints));
+
+      document.getElementById("nav-toggle").addEventListener("click", toggleNavigation);
+      document.getElementById("nav-stop").addEventListener("click", () => { stopNavigation(); resetNavigation(); });
+    }
+
+    // Navigation toggle
+    function toggleNavigation() {
+      if (!lastRouteGeo) return showToast("Prima calcola un percorso", "warning");
+      const btn = document.getElementById("nav-toggle");
+      if (!navPlaying) {
+        navPlaying = true;
+        btn.textContent = "⏸ Pausa";
+        if (!navMarker) resetNavigation();
+        navTimer = setInterval(navTick, 250);
+      } else {
+        navPlaying = false;
+        btn.textContent = "▶︎ Play";
+        if (navTimer) { clearInterval(navTimer); navTimer = null; }
+      }
+    }
+
+    // parse helpers already present above...
+
     function init() {
       loadGeocodeCache();
       loadState();
       initMap();
       setupMobileSidebar();
       setupImportHandlers();
-
+      setupEvents();
       updateUI();
       updateMarkers();
-
-      document.getElementById("address-form").addEventListener("submit", handleFormSubmit);
-      document.getElementById("start-select").addEventListener("change", updateStartEndSelectors);
-      document.getElementById("end-select").addEventListener("change", updateStartEndSelectors);
-
-      document.getElementById("calc-route-btn").addEventListener("click", calculateRoute);
-      document.getElementById("optimize-route-btn").addEventListener("click", calculateRoute);
-
-      document.getElementById("clear-route-btn").addEventListener("click", () => {
-        selectedIds = [];
-        updateUI();
-        updateMarkers();
-        clearRouteLayersOnly();
-        showToast("Ruta limpiada", "info");
-      });
-
-      document.getElementById("close-route-panel").addEventListener("click", hideRoutePanel);
-      document.getElementById("route-fab").addEventListener("click", showRoutePanel);
-
-      document.getElementById("open-gmaps-btn").addEventListener("click", () => {
-        if (!lastRoutePoints || lastRoutePoints.length < 2) return showToast("Primero calculá una ruta", "warning");
-        const origin = `${lastRoutePoints[0].lat},${lastRoutePoints[0].lng}`;
-        const dest = `${lastRoutePoints[lastRoutePoints.length-1].lat},${lastRoutePoints[lastRoutePoints.length-1].lng}`;
-        const mid = lastRoutePoints.slice(1,-1).map(p => `${p.lat},${p.lng}`).map(encodeURIComponent).join("%7C");
-        let url = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(dest)}&travelmode=driving`;
-        if (mid) url += `&waypoints=${mid}`;
-        window.open(url, "_blank", "noopener,noreferrer");
-      });
-
-      // Nav controls
-      document.getElementById("nav-toggle").addEventListener("click", toggleNavigation);
-      document.getElementById("nav-stop").addEventListener("click", () => { stopNavigation(); resetNavigation(); });
-      document.getElementById("nav-progress").addEventListener("input", (e) => {
-        if (!lastRouteGeo) return;
-        navT = Math.max(0, Math.min(1, parseInt(e.target.value,10)/100));
-        const p = getPointOnRoute(navT);
-        if (p) {
-          if (!navMarker) resetNavigation();
-          navMarker.setLatLng([p.lat, p.lng]);
-          map.panTo([p.lat, p.lng], { animate: true, duration: 0.25 });
-        }
-        updateNavUI();
-      });
-
-      showToast("Z-Index FIX ✅ + Modo navegación visible ✅", "success");
+      showToast("Pronto ✅", "success");
     }
 
     init();
