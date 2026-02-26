@@ -270,6 +270,10 @@
               <button id="reset-filters" class="w-full py-2.5 bg-slate-700 hover:bg-slate-600 rounded-xl font-semibold transition-all text-sm">
                 Azzera filtri
               </button>
+
+              <button id="delete-filtered" class="w-full py-2.5 bg-red-600/80 hover:bg-red-600 rounded-xl font-semibold transition-all text-sm mt-2">
+                Elimina tutti i filtrati
+              </button>
             </div>
           </div>
 
@@ -507,7 +511,7 @@
 
     function initMap() {
       map = L.map("map", { center: config.defaultCenter, zoom: config.defaultZoom, zoomControl: true });
-      L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
+      L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
         attribution: "&copy; OpenStreetMap contributors &copy; CARTO",
         subdomains: "abcd",
         maxZoom: 20
@@ -683,28 +687,114 @@
       container.innerHTML = filtered.map(a => {
         const sel = selectedIds.includes(a.id);
         return `
-          <div class="address-card bg-slate-700/40 rounded-xl p-3 cursor-pointer border-2 ${sel ? "border-indigo-500" : "border-transparent"}"
-               data-id="${a.id}">
-            <div class="flex items-start gap-3">
-              <div class="w-8 h-8 rounded-lg ${sel ? "bg-indigo-500" : "bg-slate-600"} flex items-center justify-center flex-shrink-0">
-                ${sel ? "✓" : "📍"}
-              </div>
-              <div class="flex-1 min-w-0">
-                <p class="font-semibold text-sm truncate">${escapeHtml(a.company || "Senza azienda")}</p>
-                <p class="text-xs text-slate-200/90 truncate">${escapeHtml(a.address)}</p>
-                <p class="text-xs text-slate-400 mt-1">${escapeHtml(a.zone || "—")} • ${escapeHtml(a.postal_code || "—")}</p>
-              </div>
-            </div>
-          </div>
-        `;
+  <div class="address-card bg-slate-700/40 rounded-xl p-3 cursor-pointer border-2 ${sel ? "border-indigo-500" : "border-transparent"}"
+       data-id="${a.id}">
+    <div class="flex items-start gap-3">
+      <div class="w-8 h-8 rounded-lg ${sel ? "bg-indigo-500" : "bg-slate-600"} flex items-center justify-center flex-shrink-0">
+        ${sel ? "✓" : "📍"}
+      </div>
+
+      <div class="flex-1 min-w-0">
+        <div class="flex items-start justify-between gap-2">
+          <p class="font-semibold text-sm truncate">${escapeHtml(a.company || "Senza azienda")}</p>
+
+          <button
+            type="button"
+            title="Elimina"
+            class="delete-btn flex-shrink-0 w-8 h-8 rounded-lg bg-slate-600/70 hover:bg-red-500/80 transition-all grid place-items-center"
+            data-del-id="${a.id}">
+            🗑️
+          </button>
+        </div>
+
+        <p class="text-xs text-slate-200/90 truncate">${escapeHtml(a.address)}</p>
+        <p class="text-xs text-slate-400 mt-1">${escapeHtml(a.zone || "—")} • ${escapeHtml(a.postal_code || "—")}</p>
+      </div>
+    </div>
+  </div>
+`;
       }).join("");
 
       container.querySelectorAll("[data-id]").forEach(el => {
         el.addEventListener("click", () => toggleAddressSelection(el.getAttribute("data-id")));
       });
+
+      container.querySelectorAll("[data-del-id]").forEach(btn => {
+        btn.addEventListener("click", (e) => {
+          e.preventDefault();
+          e.stopPropagation(); // evita selezione mentre elimini
+          const id = btn.getAttribute("data-del-id");
+          deleteAddress(id);
+        });
+      });
     }
 
-    function toggleAddressSelection(id) {
+
+    
+
+    function deleteAddress(id) {
+      const a = addresses.find(x => x.id === id);
+      if (!a) return;
+    
+      const ok = confirm(`Eliminare questo indirizzo?\n\n${a.company ? a.company + " — " : ""}${a.address}`);
+      if (!ok) return;
+    
+      if (routeActive) clearRouteLayersOnly();
+    
+      // rimuovi da selezione
+      selectedIds = selectedIds.filter(x => x !== id);
+    
+      // rimuovi dai dati
+      addresses = addresses.filter(x => x.id !== id);
+    
+      // se start/end puntavano a questo, resetta
+      const startSel = document.getElementById("start-select");
+      const endSel = document.getElementById("end-select");
+      if (startSel && startSel.value === id) startSel.value = "";
+      if (endSel && endSel.value === id) endSel.value = "";
+    
+      saveState();
+      updateUI();
+      updateMarkers();
+    
+      showToast("Indirizzo eliminato ✅", "success");
+    }
+    
+    function deleteFilteredAddresses() {
+      const filtered = getFilteredAddresses();
+    
+      if (!filtered.length) {
+        showToast("Nessun indirizzo da eliminare con i filtri attuali.", "info");
+        return;
+      }
+    
+      const ok = confirm(`Eliminare tutti gli indirizzi filtrati?\n\nTotale: ${filtered.length}\n\nQuesta azione non può essere annullata.`);
+      if (!ok) return;
+    
+      if (routeActive) clearRouteLayersOnly();
+    
+      const toDelete = new Set(filtered.map(a => a.id));
+    
+      // pulisci selezione
+      selectedIds = selectedIds.filter(id => !toDelete.has(id));
+    
+      // reset start/end se necessario
+      const startSel = document.getElementById("start-select");
+      const endSel = document.getElementById("end-select");
+      if (startSel && toDelete.has(startSel.value)) startSel.value = "";
+      if (endSel && toDelete.has(endSel.value)) endSel.value = "";
+    
+      // rimuovi indirizzi
+      addresses = addresses.filter(a => !toDelete.has(a.id));
+    
+      saveState();
+      updateUI();
+      updateMarkers();
+    
+      showToast(`Eliminati ${filtered.length} indirizzi ✅`, "success");
+    }
+
+function toggleAddressSelection(id) {
       const idx = selectedIds.indexOf(id);
       if (idx > -1) selectedIds.splice(idx, 1);
       else {
@@ -1373,6 +1463,10 @@
         document.getElementById("postal-filter").value = "";
         document.getElementById("search-input").value = "";
         rerender();
+      });
+
+      document.getElementById("delete-filtered").addEventListener("click", () => {
+        deleteFilteredAddresses();
       });
 
       document.getElementById("start-select").addEventListener("change", updateStartEndSelectors);
