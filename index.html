@@ -180,8 +180,6 @@
               <input type="text" id="address-input" placeholder="Indirizzo completo..."
                 class="w-full px-4 py-3 bg-slate-700/50 border border-slate-600 rounded-xl focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all" />
               <div class="grid grid-cols-2 gap-3">
-                <!--<input type="text" id="zone-input" placeholder="Zona"
-                  class="px-4 py-2.5 bg-slate-700/50 border border-slate-600 rounded-xl focus:outline-none focus:border-indigo-500 transition-all" />-->
                 <input type="text" id="postal-input" placeholder="CAP"
                   class="px-4 py-2.5 bg-slate-700/50 border border-slate-600 rounded-xl focus:outline-none focus:border-indigo-500 transition-all" />
               </div>
@@ -223,9 +221,6 @@
                   <select id="address-column" class="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-sm">
                     <option value="">Colonna Indirizzo</option>
                   </select>
-                  <!--<select id="zone-column" class="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-sm">
-                    <option value="">Colonna Zona (opzionale)</option>
-                  </select>-->
                   <select id="postal-column" class="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-sm">
                     <option value="">Colonna CAP (opzionale)</option>
                   </select>
@@ -258,10 +253,6 @@
               <select id="company-filter" class="w-full px-4 py-2.5 bg-slate-700/50 border border-slate-600 rounded-xl">
                 <option value="">Tutte le aziende</option>
               </select>
-
-              <!--<select id="zone-filter" class="w-full px-4 py-2.5 bg-slate-700/50 border border-slate-600 rounded-xl">
-                <option value="">Tutte le zone</option>
-              </select>-->
 
               <select id="postal-filter" class="w-full px-4 py-2.5 bg-slate-700/50 border border-slate-600 rounded-xl">
                 <option value="">Tutti i CAP</option>
@@ -438,7 +429,7 @@
     let lastRouteGeo = null;
     let lastRouteDurationSec = 0;
 
-    let routeActive = false; // ✅ quando true, sul mapa mostriamo SOLO i punti del percorso
+    let routeActive = false;
 
     // Navigation sim
     let navMarker = null;
@@ -591,21 +582,19 @@
     function getFilters() {
       return {
         company: document.getElementById("company-filter").value,
-        zone: document.getElementById("zone-filter").value,
         postal: document.getElementById("postal-filter").value,
         q: (document.getElementById("search-input").value || "").trim().toLowerCase()
       };
     }
 
     function getFilteredAddresses() {
-      const { company, zone, postal, q } = getFilters();
+      const { company, postal, q } = getFilters();
       let filtered = [...addresses];
       if (company) filtered = filtered.filter(a => (a.company || "") === company);
-      if (zone) filtered = filtered.filter(a => (a.zone || "") === zone);
       if (postal) filtered = filtered.filter(a => (a.postal_code || "") === postal);
       if (q) {
         filtered = filtered.filter(a => {
-          const blob = `${a.company||""} ${a.address||""} ${a.zone||""} ${a.postal_code||""}`.toLowerCase();
+          const blob = `${a.company||""} ${a.address||""} ${a.postal_code||""}`.toLowerCase();
           return blob.includes(q);
         });
       }
@@ -615,9 +604,7 @@
     // ✅ se esiste un percorso: mostra SOLO punti del percorso
     function shouldShowMarker(addr) {
       if (!routeActive) return true;
-      // mostra solo se l'indirizzo è nel set del percorso (start/end inclusi se sono addresses)
       if (routeBadges[addr.id]) return true;
-      // in alternativa: se è selezionato (quando routeActive ma ancora non disegnato)
       return false;
     }
 
@@ -625,8 +612,6 @@
       Object.values(markers).forEach(m => map.removeLayer(m));
       markers = {};
 
-      // in modalità percorso attivo: non filtri la mappa per filtri UX,
-      // mostri solo route points (meno confusione)
       const source = routeActive ? addresses : getFilteredAddresses();
 
       source.forEach(addr => {
@@ -635,7 +620,6 @@
         markers[addr.id] = createMarker(addr);
       });
 
-      // se c'è un percorso, riapplica i badge e i marker start/end
       if (lastRoutePoints?.length) applyRouteBadges(lastRoutePoints);
 
       const visible = Object.values(markers);
@@ -647,26 +631,20 @@
 
     function updateFilterOptions() {
       const companies = [...new Set(addresses.map(a => a.company).filter(Boolean))].sort();
-      const zones = [...new Set(addresses.map(a => a.zone).filter(Boolean))].sort();
       const postals = [...new Set(addresses.map(a => a.postal_code).filter(Boolean))].sort();
 
       const companySel = document.getElementById("company-filter");
-      const zoneSel = document.getElementById("zone-filter");
       const postalSel = document.getElementById("postal-filter");
 
       const prevC = companySel.value;
-      const prevZ = zoneSel.value;
       const prevP = postalSel.value;
 
       companySel.innerHTML = `<option value="">Tutte le aziende</option>` +
         companies.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join("");
-      zoneSel.innerHTML = `<option value="">Tutte le zone</option>` +
-        zones.map(z => `<option value="${escapeHtml(z)}">${escapeHtml(z)}</option>`).join("");
       postalSel.innerHTML = `<option value="">Tutti i CAP</option>` +
         postals.map(p => `<option value="${escapeHtml(p)}">${escapeHtml(p)}</option>`).join("");
 
       if (companies.includes(prevC)) companySel.value = prevC;
-      if (zones.includes(prevZ)) zoneSel.value = prevZ;
       if (postals.includes(prevP)) postalSel.value = prevP;
 
       const filteredCount = getFilteredAddresses().length;
@@ -708,7 +686,7 @@
         </div>
 
         <p class="text-xs text-slate-200/90 truncate">${escapeHtml(a.address)}</p>
-        <p class="text-xs text-slate-400 mt-1">${escapeHtml(a.zone || "—")} • ${escapeHtml(a.postal_code || "—")}</p>
+        <p class="text-xs text-slate-400 mt-1">CAP: ${escapeHtml(a.postal_code || "—")}</p>
       </div>
     </div>
   </div>
@@ -722,79 +700,68 @@
       container.querySelectorAll("[data-del-id]").forEach(btn => {
         btn.addEventListener("click", (e) => {
           e.preventDefault();
-          e.stopPropagation(); // evita selezione mentre elimini
+          e.stopPropagation();
           const id = btn.getAttribute("data-del-id");
           deleteAddress(id);
         });
       });
     }
 
-
-    
-
     function deleteAddress(id) {
       const a = addresses.find(x => x.id === id);
       if (!a) return;
-    
+
       const ok = confirm(`Eliminare questo indirizzo?\n\n${a.company ? a.company + " — " : ""}${a.address}`);
       if (!ok) return;
-    
+
       if (routeActive) clearRouteLayersOnly();
-    
-      // rimuovi da selezione
+
       selectedIds = selectedIds.filter(x => x !== id);
-    
-      // rimuovi dai dati
       addresses = addresses.filter(x => x.id !== id);
-    
-      // se start/end puntavano a questo, resetta
+
       const startSel = document.getElementById("start-select");
       const endSel = document.getElementById("end-select");
       if (startSel && startSel.value === id) startSel.value = "";
       if (endSel && endSel.value === id) endSel.value = "";
-    
+
       saveState();
       updateUI();
       updateMarkers();
-    
+
       showToast("Indirizzo eliminato ✅", "success");
     }
-    
+
     function deleteFilteredAddresses() {
       const filtered = getFilteredAddresses();
-    
+
       if (!filtered.length) {
         showToast("Nessun indirizzo da eliminare con i filtri attuali.", "info");
         return;
       }
-    
+
       const ok = confirm(`Eliminare tutti gli indirizzi filtrati?\n\nTotale: ${filtered.length}\n\nQuesta azione non può essere annullata.`);
       if (!ok) return;
-    
+
       if (routeActive) clearRouteLayersOnly();
-    
+
       const toDelete = new Set(filtered.map(a => a.id));
-    
-      // pulisci selezione
       selectedIds = selectedIds.filter(id => !toDelete.has(id));
-    
-      // reset start/end se necessario
+
       const startSel = document.getElementById("start-select");
       const endSel = document.getElementById("end-select");
       if (startSel && toDelete.has(startSel.value)) startSel.value = "";
       if (endSel && toDelete.has(endSel.value)) endSel.value = "";
-    
-      // rimuovi indirizzi
+
       addresses = addresses.filter(a => !toDelete.has(a.id));
-    
+
       saveState();
       updateUI();
       updateMarkers();
-    
+
       showToast(`Eliminati ${filtered.length} indirizzi ✅`, "success");
     }
 
-function toggleAddressSelection(id) {
+    function toggleAddressSelection(id) {
       const idx = selectedIds.indexOf(id);
       if (idx > -1) selectedIds.splice(idx, 1);
       else {
@@ -963,7 +930,7 @@ function toggleAddressSelection(id) {
       hideRoutePanel();
       document.getElementById("nav-panel").style.display = "none";
 
-      routeActive = false; // ✅ torna a mostrare tutto
+      routeActive = false;
       updateMarkers();
     }
 
@@ -1050,14 +1017,11 @@ function toggleAddressSelection(id) {
         const route = routeRes.routes?.[0];
         if (!route) throw new Error("Percorso non trovato");
 
-        // ✅ attiva modalità "solo percorso"
         routeActive = true;
 
-        // rimuovi tutto e ridisegna solo i punti del percorso
         Object.values(markers).forEach(m => map.removeLayer(m));
         markers = {};
 
-        // crea marker SOLO per indirizzi del percorso (quelli con id) + start/end temporanei se servono
         points.forEach(p => {
           if (p.__type === "addr" && p.id) {
             const a = addresses.find(x => x.id === p.id);
@@ -1065,7 +1029,6 @@ function toggleAddressSelection(id) {
           }
         });
 
-        // ora disegna route e badge
         if (routeLayer) { map.removeLayer(routeLayer); routeLayer = null; }
         clearRouteBadges();
         drawRouteGeometry(route.geometry);
@@ -1237,24 +1200,20 @@ function toggleAddressSelection(id) {
       const headers = Object.keys(data[0] || {});
       const companySel = document.getElementById("company-column");
       const addressSel = document.getElementById("address-column");
-      const zoneSel = document.getElementById("zone-column");
       const postalSel = document.getElementById("postal-column");
 
       companySel.innerHTML = `<option value="">Colonna Azienda (opzionale)</option>`;
       addressSel.innerHTML = `<option value="">Colonna Indirizzo</option>`;
-      zoneSel.innerHTML = `<option value="">Colonna Zona (opzionale)</option>`;
       postalSel.innerHTML = `<option value="">Colonna CAP (opzionale)</option>`;
 
       headers.forEach(h => {
         companySel.appendChild(new Option(h, h));
         addressSel.appendChild(new Option(h, h));
-        zoneSel.appendChild(new Option(h, h));
         postalSel.appendChild(new Option(h, h));
 
         const low = h.toLowerCase();
         if (low.includes("azienda") || low.includes("company") || low.includes("nome") || low.includes("name") || low.includes("empresa")) companySel.value = h;
         if (low.includes("indirizzo") || low.includes("address") || low.includes("dirección") || low.includes("direccion")) addressSel.value = h;
-        if (low.includes("zona") || low.includes("zone") || low.includes("quartiere")) zoneSel.value = h;
         if (low.includes("cap") || low.includes("postal") || low.includes("zip") || low.includes("codigo")) postalSel.value = h;
       });
     }
@@ -1321,7 +1280,6 @@ function toggleAddressSelection(id) {
       if (!importedData?.length) return showToast("Nessun dato", "warning");
       const companyCol = document.getElementById("company-column").value;
       const addressCol = document.getElementById("address-column").value;
-      const zoneCol = document.getElementById("zone-column").value;
       const postalCol = document.getElementById("postal-column").value;
       if (!addressCol) return showToast("Seleziona la colonna Indirizzo", "warning");
 
@@ -1343,7 +1301,6 @@ function toggleAddressSelection(id) {
           id,
           company: companyCol ? (row[companyCol] ?? "").toString().trim() : "",
           address: addr,
-          zone: zoneCol ? (row[zoneCol] ?? "").toString().trim() : "",
           postal_code: postalCol ? (row[postalCol] ?? "").toString().trim() : "",
           lat: coords.lat,
           lng: coords.lng
@@ -1429,7 +1386,6 @@ function toggleAddressSelection(id) {
         id,
         company,
         address,
-        zone: document.getElementById("zone-input").value.trim() || "",
         postal_code: document.getElementById("postal-input").value.trim() || "",
         lat: coords.lat,
         lng: coords.lng
@@ -1437,13 +1393,12 @@ function toggleAddressSelection(id) {
 
       document.getElementById("company-input").value = "";
       document.getElementById("address-input").value = "";
-      document.getElementById("zone-input").value = "";
       document.getElementById("postal-input").value = "";
 
       saveState();
       setLoading(false);
       updateUI();
-      if (!routeActive) updateMarkers(); // se percorso attivo, non confondere la mappa
+      if (!routeActive) updateMarkers();
       showToast("Indirizzo aggiunto ✅", "success");
     }
 
@@ -1453,13 +1408,11 @@ function toggleAddressSelection(id) {
       const rerender = () => { updateUI(); if (!routeActive) updateMarkers(); };
 
       document.getElementById("company-filter").addEventListener("change", rerender);
-      document.getElementById("zone-filter").addEventListener("change", rerender);
       document.getElementById("postal-filter").addEventListener("change", rerender);
       document.getElementById("search-input").addEventListener("input", rerender);
 
       document.getElementById("reset-filters").addEventListener("click", () => {
         document.getElementById("company-filter").value = "";
-        document.getElementById("zone-filter").value = "";
         document.getElementById("postal-filter").value = "";
         document.getElementById("search-input").value = "";
         rerender();
@@ -1489,24 +1442,6 @@ function toggleAddressSelection(id) {
       document.getElementById("nav-toggle").addEventListener("click", toggleNavigation);
       document.getElementById("nav-stop").addEventListener("click", () => { stopNavigation(); resetNavigation(); });
     }
-
-    // Navigation toggle
-    function toggleNavigation() {
-      if (!lastRouteGeo) return showToast("Prima calcola un percorso", "warning");
-      const btn = document.getElementById("nav-toggle");
-      if (!navPlaying) {
-        navPlaying = true;
-        btn.textContent = "⏸ Pausa";
-        if (!navMarker) resetNavigation();
-        navTimer = setInterval(navTick, 250);
-      } else {
-        navPlaying = false;
-        btn.textContent = "▶︎ Play";
-        if (navTimer) { clearInterval(navTimer); navTimer = null; }
-      }
-    }
-
-    // parse helpers already present above...
 
     function init() {
       loadGeocodeCache();
