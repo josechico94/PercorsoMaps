@@ -180,8 +180,8 @@
               <input type="text" id="address-input" placeholder="Indirizzo completo..."
                 class="w-full px-4 py-3 bg-slate-700/50 border border-slate-600 rounded-xl focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all" />
               <div class="grid grid-cols-2 gap-3">
-                <input type="text" id="zone-input" placeholder="Zona"
-                  class="px-4 py-2.5 bg-slate-700/50 border border-slate-600 rounded-xl focus:outline-none focus:border-indigo-500 transition-all" />
+                <!--<input type="text" id="zone-input" placeholder="Zona"
+                  class="px-4 py-2.5 bg-slate-700/50 border border-slate-600 rounded-xl focus:outline-none focus:border-indigo-500 transition-all" />-->
                 <input type="text" id="postal-input" placeholder="CAP"
                   class="px-4 py-2.5 bg-slate-700/50 border border-slate-600 rounded-xl focus:outline-none focus:border-indigo-500 transition-all" />
               </div>
@@ -223,9 +223,9 @@
                   <select id="address-column" class="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-sm">
                     <option value="">Colonna Indirizzo</option>
                   </select>
-                  <select id="zone-column" class="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-sm">
+                  <!--<select id="zone-column" class="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-sm">
                     <option value="">Colonna Zona (opzionale)</option>
-                  </select>
+                  </select>-->
                   <select id="postal-column" class="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-sm">
                     <option value="">Colonna CAP (opzionale)</option>
                   </select>
@@ -251,7 +251,7 @@
               <span id="filter-count" class="text-xs px-2 py-1 bg-slate-700/70 text-slate-200 rounded-full">Mostro 0/0</span>
             </div>
 
-            <input id="search-input" type="text" placeholder="Cerca (azienda, indirizzo, CAP, zona)…"
+            <input id="search-input" type="text" placeholder="Cerca (azienda, indirizzo, CAP)…"
               class="w-full px-4 py-2.5 bg-slate-700/50 border border-slate-600 rounded-xl focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all" />
 
             <div class="space-y-3 mt-3">
@@ -259,9 +259,9 @@
                 <option value="">Tutte le aziende</option>
               </select>
 
-              <select id="zone-filter" class="w-full px-4 py-2.5 bg-slate-700/50 border border-slate-600 rounded-xl">
+              <!--<select id="zone-filter" class="w-full px-4 py-2.5 bg-slate-700/50 border border-slate-600 rounded-xl">
                 <option value="">Tutte le zone</option>
-              </select>
+              </select>-->
 
               <select id="postal-filter" class="w-full px-4 py-2.5 bg-slate-700/50 border border-slate-600 rounded-xl">
                 <option value="">Tutti i CAP</option>
@@ -1242,7 +1242,7 @@ function toggleAddressSelection(id) {
 
       companySel.innerHTML = `<option value="">Colonna Azienda (opzionale)</option>`;
       addressSel.innerHTML = `<option value="">Colonna Indirizzo</option>`;
-      zoneSel.innerHTML = `<option value="">Colonna Zona (opzionale)</option>`;
+      //zoneSel.innerHTML = `<option value="">Colonna Zona (opzionale)</option>`;
       postalSel.innerHTML = `<option value="">Colonna CAP (opzionale)</option>`;
 
       headers.forEach(h => {
@@ -1254,7 +1254,7 @@ function toggleAddressSelection(id) {
         const low = h.toLowerCase();
         if (low.includes("azienda") || low.includes("company") || low.includes("nome") || low.includes("name") || low.includes("empresa")) companySel.value = h;
         if (low.includes("indirizzo") || low.includes("address") || low.includes("dirección") || low.includes("direccion")) addressSel.value = h;
-        if (low.includes("zona") || low.includes("zone") || low.includes("quartiere")) zoneSel.value = h;
+        //if (low.includes("zona") || low.includes("zone") || low.includes("quartiere")) zoneSel.value = h;
         if (low.includes("cap") || low.includes("postal") || low.includes("zip") || low.includes("codigo")) postalSel.value = h;
       });
     }
@@ -1283,7 +1283,7 @@ function toggleAddressSelection(id) {
     function setupImportHandlers() {
       const toggleBtn = document.getElementById("toggle-import-form");
       const importSection = document.getElementById("import-form-section");
-      const dropZone = document.getElementById("drop-zone");
+      //const dropZone = document.getElementById("drop-zone");
       const fileInput = document.getElementById("file-input");
       const cancelBtn = document.getElementById("cancel-import-btn");
 
