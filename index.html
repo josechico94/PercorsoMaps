@@ -1242,7 +1242,7 @@ function toggleAddressSelection(id) {
 
       companySel.innerHTML = `<option value="">Colonna Azienda (opzionale)</option>`;
       addressSel.innerHTML = `<option value="">Colonna Indirizzo</option>`;
-      //zoneSel.innerHTML = `<option value="">Colonna Zona (opzionale)</option>`;
+      zoneSel.innerHTML = `<option value="">Colonna Zona (opzionale)</option>`;
       postalSel.innerHTML = `<option value="">Colonna CAP (opzionale)</option>`;
 
       headers.forEach(h => {
@@ -1254,7 +1254,7 @@ function toggleAddressSelection(id) {
         const low = h.toLowerCase();
         if (low.includes("azienda") || low.includes("company") || low.includes("nome") || low.includes("name") || low.includes("empresa")) companySel.value = h;
         if (low.includes("indirizzo") || low.includes("address") || low.includes("dirección") || low.includes("direccion")) addressSel.value = h;
-        //if (low.includes("zona") || low.includes("zone") || low.includes("quartiere")) zoneSel.value = h;
+        if (low.includes("zona") || low.includes("zone") || low.includes("quartiere")) zoneSel.value = h;
         if (low.includes("cap") || low.includes("postal") || low.includes("zip") || low.includes("codigo")) postalSel.value = h;
       });
     }
@@ -1283,7 +1283,7 @@ function toggleAddressSelection(id) {
     function setupImportHandlers() {
       const toggleBtn = document.getElementById("toggle-import-form");
       const importSection = document.getElementById("import-form-section");
-      //const dropZone = document.getElementById("drop-zone");
+      const dropZone = document.getElementById("drop-zone");
       const fileInput = document.getElementById("file-input");
       const cancelBtn = document.getElementById("cancel-import-btn");
 
