@@ -150,6 +150,12 @@
 
       <div class="flex items-center gap-2">
         <span id="address-count" class="text-sm text-slate-400">0 indirizzi</span>
+
+        <!-- ✅ Toggle mappa Dark/Light -->
+        <button id="toggle-theme"
+          class="p-2 rounded-lg bg-slate-700 hover:bg-slate-600"
+          title="Tema mappa: Dark/Light">🌙</button>
+
         <button id="toggle-panel" class="lg:hidden p-2 rounded-lg bg-slate-700 hover:bg-slate-600" title="Apri pannello">
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
@@ -407,13 +413,17 @@
       defaultCenter: [44.4949, 11.3426],
       defaultZoom: 13,
       storageKey: "route_planner_beta_state_it_v9",
-      geocodeCacheKey: "route_planner_beta_geocode_cache_it_v9"
+      geocodeCacheKey: "route_planner_beta_geocode_cache_it_v9",
+      mapThemeKey: "map_theme_v1"
     };
 
     let addresses = [];
     let selectedIds = [];
     let markers = {};
     let map = null;
+
+    // ✅ Tile layer per dark/light
+    let tileLayer = null;
 
     let routeLayer = null;
     let routeBadges = {};
@@ -474,6 +484,44 @@
       } catch {}
     }
 
+    // =========================
+    // MAP THEME (DARK/LIGHT)
+    // =========================
+    function getSavedMapTheme() {
+      return localStorage.getItem(config.mapThemeKey) || "dark";
+    }
+    function setSavedMapTheme(theme) {
+      localStorage.setItem(config.mapThemeKey, theme);
+    }
+    function getTileUrl(theme) {
+      if (theme === "dark") {
+        return {
+          url: "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
+          attr: "&copy; OpenStreetMap contributors &copy; CARTO"
+        };
+      }
+      return {
+        url: "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
+        attr: "&copy; OpenStreetMap contributors &copy; CARTO"
+      };
+    }
+    function applyMapTheme(theme) {
+      const t = getTileUrl(theme);
+      if (tileLayer) map.removeLayer(tileLayer);
+
+      tileLayer = L.tileLayer(t.url, {
+        attribution: t.attr,
+        subdomains: "abcd",
+        maxZoom: 20
+      }).addTo(map);
+
+      const btn = document.getElementById("toggle-theme");
+      if (btn) btn.textContent = (theme === "dark") ? "🌙" : "☀️";
+
+      const mapEl = document.querySelector(".leaflet-container");
+      if (mapEl) mapEl.style.background = (theme === "dark") ? "#0b1220" : "#e5e7eb";
+    }
+
     function normalizeAddressForGeocode(addr) {
       const shouldAppend = document.getElementById("append-bologna")?.checked ?? true;
       if (!shouldAppend) return addr;
@@ -502,11 +550,7 @@
 
     function initMap() {
       map = L.map("map", { center: config.defaultCenter, zoom: config.defaultZoom, zoomControl: true });
-      L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
-        attribution: "&copy; OpenStreetMap contributors &copy; CARTO",
-        subdomains: "abcd",
-        maxZoom: 20
-      }).addTo(map);
+      applyMapTheme(getSavedMapTheme());
     }
 
     // MARKERS
@@ -601,7 +645,6 @@
       return filtered;
     }
 
-    // ✅ se esiste un percorso: mostra SOLO punti del percorso
     function shouldShowMarker(addr) {
       if (!routeActive) return true;
       if (routeBadges[addr.id]) return true;
@@ -772,7 +815,6 @@
       updateUI();
     }
 
-    // START/END
     function updateStartEndSelectors() {
       const startSel = document.getElementById("start-select");
       const endSel = document.getElementById("end-select");
@@ -1190,8 +1232,6 @@
     function normalizeStreetWithNumber(streetRaw) {
       let s = (streetRaw || "").trim().replace(/\s*,\s*/g, ", ");
       if (!s) return "";
-
-      // Se non ha virgola e termina con numero: "Via X 36" -> "Via X, 36"
       if (!s.includes(",")) {
         const m = s.match(/^(.*?)(\s+\d+[A-Za-z0-9\/\-]*)$/);
         if (m) s = `${m[1].trim()}, ${m[2].trim()}`;
@@ -1207,7 +1247,6 @@
       return `${st}, ${tail}`;
     }
 
-    // IMPORT
     function parseCSV(text) {
       const raw = text.trim();
       if (!raw) return [];
@@ -1224,6 +1263,7 @@
       }
       return out;
     }
+
     function parseXLSX(arrayBuffer) {
       const wb = XLSX.read(arrayBuffer, { type: "array" });
       const ws = wb.Sheets[wb.SheetNames[0]];
@@ -1240,14 +1280,12 @@
       addressSel.innerHTML = `<option value="">Colonna Indirizzo</option>`;
       postalSel.innerHTML = `<option value="">Colonna CAP (opzionale)</option>`;
 
-      // Detect Zipfluid export headers (case-insensitive)
       const lowHeaders = headers.map(h => h.toLowerCase().trim());
       const hasStreet = lowHeaders.includes("indirizzo");
       const hasCity = lowHeaders.includes("citta") || lowHeaders.includes("città");
       const hasProv = lowHeaders.includes("provincia");
       const hasCap = lowHeaders.includes("cap");
 
-      // Se è il tuo CSV: aggiungo opzione "composta"
       if (hasStreet && hasCity && hasProv && hasCap) {
         addressSel.insertAdjacentHTML(
           "beforeend",
@@ -1263,22 +1301,19 @@
 
         const low = h.toLowerCase();
 
-        if (
-          low.includes("azienda") || low.includes("company") ||
-          low.includes("nome") || low.includes("name") || low.includes("empresa")
-        ) companySel.value = h;
+        if (low.includes("azienda") || low.includes("company") || low.includes("nome") || low.includes("name") || low.includes("empresa")) {
+          companySel.value = h;
+        }
 
-        if (
-          addressSel.value !== "__ZIPFLUID_COMPOSE__" &&
-          (low.includes("indirizzo") || low.includes("address") || low.includes("dirección") || low.includes("direccion"))
-        ) addressSel.value = h;
+        if (addressSel.value !== "__ZIPFLUID_COMPOSE__" && (low.includes("indirizzo") || low.includes("address") || low.includes("dirección") || low.includes("direccion"))) {
+          addressSel.value = h;
+        }
 
         if (low === "cap" || low.includes("postal") || low.includes("zip") || low.includes("codigo")) {
           postalSel.value = h;
         }
       });
 
-      // Defaults ideali per Zipfluid
       if (addressSel.value === "__ZIPFLUID_COMPOSE__") {
         const hAzienda = headers.find(x => x.toLowerCase().trim() === "azienda");
         const hCap2 = headers.find(x => x.toLowerCase().trim() === "cap");
@@ -1362,7 +1397,6 @@
       for (let i = 0; i < importedData.length; i++) {
         const row = importedData[i];
 
-        // ✅ costruisco l'indirizzo in stile: "Via X, 36, 40033 Città BO"
         let addr = "";
         if (addressCol === "__ZIPFLUID_COMPOSE__") {
           const street = getRowVal(row, ["Indirizzo"]);
@@ -1373,7 +1407,6 @@
         } else {
           addr = (row[addressCol] ?? "").toString().trim();
         }
-
         if (!addr) continue;
 
         setLoading(true, `Importazione ${i+1}/${importedData.length}…`, addr);
@@ -1403,7 +1436,7 @@
 
       saveState();
       updateUI();
-      updateMarkers();
+      if (!routeActive) updateMarkers();
       showToast(`Import: ${ok} ok${err ? ` • ${err} errori` : ""}`, ok ? "success" : "error");
     }
 
@@ -1417,7 +1450,6 @@
     }
 
     // Google Maps
-    function isIOS() { return /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream; }
     function isAndroid() { return /Android/.test(navigator.userAgent); }
 
     function openGoogleMapsNavigation(points) {
@@ -1529,6 +1561,15 @@
 
       document.getElementById("nav-toggle").addEventListener("click", toggleNavigation);
       document.getElementById("nav-stop").addEventListener("click", () => { stopNavigation(); resetNavigation(); });
+
+      // ✅ Toggle Dark/Light della mappa
+      document.getElementById("toggle-theme").addEventListener("click", () => {
+        const current = getSavedMapTheme();
+        const next = current === "dark" ? "light" : "dark";
+        setSavedMapTheme(next);
+        applyMapTheme(next);
+        showToast(`Mappa: ${next === "dark" ? "Dark" : "Light"} ✅`, "success");
+      });
     }
 
     function init() {
