@@ -1174,6 +1174,39 @@
       }
     }
 
+    // =========================
+    // IMPORT HELPERS (ZIPFLUID)
+    // =========================
+    function getRowVal(row, candidates) {
+      const keys = Object.keys(row || {});
+      const map = new Map(keys.map(k => [k.toLowerCase().trim(), k]));
+      for (const c of candidates) {
+        const hit = map.get(String(c).toLowerCase().trim());
+        if (hit != null) return (row[hit] ?? "").toString().trim();
+      }
+      return "";
+    }
+
+    function normalizeStreetWithNumber(streetRaw) {
+      let s = (streetRaw || "").trim().replace(/\s*,\s*/g, ", ");
+      if (!s) return "";
+
+      // Se non ha virgola e termina con numero: "Via X 36" -> "Via X, 36"
+      if (!s.includes(",")) {
+        const m = s.match(/^(.*?)(\s+\d+[A-Za-z0-9\/\-]*)$/);
+        if (m) s = `${m[1].trim()}, ${m[2].trim()}`;
+      }
+      return s;
+    }
+
+    function composeItalianIndirizzo(street, cap, city, prov) {
+      const st = normalizeStreetWithNumber(street);
+      const tail = [cap, city, prov].filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
+      if (!st) return tail;
+      if (!tail) return st;
+      return `${st}, ${tail}`;
+    }
+
     // IMPORT
     function parseCSV(text) {
       const raw = text.trim();
@@ -1196,6 +1229,7 @@
       const ws = wb.Sheets[wb.SheetNames[0]];
       return XLSX.utils.sheet_to_json(ws, { defval: "" });
     }
+
     function populateColumnSelectors(data) {
       const headers = Object.keys(data[0] || {});
       const companySel = document.getElementById("company-column");
@@ -1206,17 +1240,53 @@
       addressSel.innerHTML = `<option value="">Colonna Indirizzo</option>`;
       postalSel.innerHTML = `<option value="">Colonna CAP (opzionale)</option>`;
 
+      // Detect Zipfluid export headers (case-insensitive)
+      const lowHeaders = headers.map(h => h.toLowerCase().trim());
+      const hasStreet = lowHeaders.includes("indirizzo");
+      const hasCity = lowHeaders.includes("citta") || lowHeaders.includes("città");
+      const hasProv = lowHeaders.includes("provincia");
+      const hasCap = lowHeaders.includes("cap");
+
+      // Se è il tuo CSV: aggiungo opzione "composta"
+      if (hasStreet && hasCity && hasProv && hasCap) {
+        addressSel.insertAdjacentHTML(
+          "beforeend",
+          `<option value="__ZIPFLUID_COMPOSE__">Indirizzo (Indirizzo + CAP + Città + Provincia)</option>`
+        );
+        addressSel.value = "__ZIPFLUID_COMPOSE__";
+      }
+
       headers.forEach(h => {
         companySel.appendChild(new Option(h, h));
         addressSel.appendChild(new Option(h, h));
         postalSel.appendChild(new Option(h, h));
 
         const low = h.toLowerCase();
-        if (low.includes("azienda") || low.includes("company") || low.includes("nome") || low.includes("name") || low.includes("empresa")) companySel.value = h;
-        if (low.includes("indirizzo") || low.includes("address") || low.includes("dirección") || low.includes("direccion")) addressSel.value = h;
-        if (low.includes("cap") || low.includes("postal") || low.includes("zip") || low.includes("codigo")) postalSel.value = h;
+
+        if (
+          low.includes("azienda") || low.includes("company") ||
+          low.includes("nome") || low.includes("name") || low.includes("empresa")
+        ) companySel.value = h;
+
+        if (
+          addressSel.value !== "__ZIPFLUID_COMPOSE__" &&
+          (low.includes("indirizzo") || low.includes("address") || low.includes("dirección") || low.includes("direccion"))
+        ) addressSel.value = h;
+
+        if (low === "cap" || low.includes("postal") || low.includes("zip") || low.includes("codigo")) {
+          postalSel.value = h;
+        }
       });
+
+      // Defaults ideali per Zipfluid
+      if (addressSel.value === "__ZIPFLUID_COMPOSE__") {
+        const hAzienda = headers.find(x => x.toLowerCase().trim() === "azienda");
+        const hCap2 = headers.find(x => x.toLowerCase().trim() === "cap");
+        if (hAzienda) companySel.value = hAzienda;
+        if (hCap2) postalSel.value = hCap2;
+      }
     }
+
     function handleFileSelect(file) {
       document.getElementById("file-name").textContent = file.name;
       const reader = new FileReader();
@@ -1239,6 +1309,7 @@
       if (file.name.toLowerCase().endsWith(".csv")) reader.readAsText(file);
       else reader.readAsArrayBuffer(file);
     }
+
     function setupImportHandlers() {
       const toggleBtn = document.getElementById("toggle-import-form");
       const importSection = document.getElementById("import-form-section");
@@ -1287,9 +1358,22 @@
       importBtn.disabled = true;
 
       let ok = 0, err = 0;
+
       for (let i = 0; i < importedData.length; i++) {
         const row = importedData[i];
-        const addr = (row[addressCol] ?? "").toString().trim();
+
+        // ✅ costruisco l'indirizzo in stile: "Via X, 36, 40033 Città BO"
+        let addr = "";
+        if (addressCol === "__ZIPFLUID_COMPOSE__") {
+          const street = getRowVal(row, ["Indirizzo"]);
+          const cap = getRowVal(row, ["CAP"]);
+          const city = getRowVal(row, ["Citta", "Città"]);
+          const prov = getRowVal(row, ["Provincia"]);
+          addr = composeItalianIndirizzo(street, cap, city, prov);
+        } else {
+          addr = (row[addressCol] ?? "").toString().trim();
+        }
+
         if (!addr) continue;
 
         setLoading(true, `Importazione ${i+1}/${importedData.length}…`, addr);
@@ -1297,11 +1381,15 @@
         if (!coords) { err++; await sleep(config.importGeocodeDelayMs); continue; }
 
         const id = (crypto.randomUUID ? crypto.randomUUID() : (Date.now().toString() + Math.random().toString(16).slice(2)));
+
         addresses.push({
           id,
           company: companyCol ? (row[companyCol] ?? "").toString().trim() : "",
           address: addr,
-          postal_code: postalCol ? (row[postalCol] ?? "").toString().trim() : "",
+          postal_code:
+            addressCol === "__ZIPFLUID_COMPOSE__"
+              ? getRowVal(row, ["CAP"])
+              : (postalCol ? (row[postalCol] ?? "").toString().trim() : ""),
           lat: coords.lat,
           lng: coords.lng
         });
